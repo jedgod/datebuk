@@ -52,14 +52,14 @@ export default function HomePage() {
           aria-hidden="true"
           className="absolute inset-0 -z-10 bg-gradient-to-r from-white/70 via-white/15 to-transparent"
         />
-        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-5 py-16 lg:grid-cols-[1.08fr_.92fr] lg:px-8 lg:py-24">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-10 px-5 pb-14 pt-4 lg:grid-cols-[1.08fr_.92fr] lg:px-8 lg:pb-20 lg:pt-5">
         <div className="relative z-10">
           <p className="inline-flex items-center gap-2 rounded-full border bg-white/95 backdrop-blur-sm px-3 py-1 text-xs font-semibold text-gray-700">
             <span className="h-2 w-2 rounded-full bg-green-500" />
             Real people • Verified profiles • Secure chat
           </p>
 
-          <h1 className="mt-6 max-w-3xl text-5xl font-black leading-[1.05] tracking-[-0.04em] text-slate-950 md:text-6xl">
+          <h1 className="mt-4 max-w-3xl text-5xl font-black leading-[1.05] tracking-[-0.04em] text-slate-950 md:text-6xl">
             Find someone who actually fits your life.
           </h1>
 
@@ -100,7 +100,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="flex items-center relative z-10">
+        <div className="flex items-start relative z-10">
           <div className="w-full rounded-3xl border border-slate-200 bg-white p-7 shadow-2xl shadow-slate-900/10 lg:p-9">
             <h2 className="text-xl font-extrabold text-gray-900">
               Start in 60 seconds

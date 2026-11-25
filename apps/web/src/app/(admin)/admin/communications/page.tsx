@@ -6,7 +6,10 @@ import { CommunicationsConsole } from "@/components/communications/Communication
 export default function AdminCommunicationsPage() {
   return (
     <DashboardLayout>
-      <CommunicationsConsole mode="admin" />
+      {/* Cancels DashboardLayout's 24px top padding so the console sits directly under the header bar. */}
+      <div className="-mt-4 md:-mt-6">
+        <CommunicationsConsole mode="admin" />
+      </div>
     </DashboardLayout>
   );
 }

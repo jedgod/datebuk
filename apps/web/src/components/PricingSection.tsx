@@ -107,8 +107,8 @@ export function PricingSection() {
 
   if (loading) {
     return (
-      <section id="pricing" className="relative z-20 bg-slate-200/75 py-14 backdrop-blur-[2px]">
-        <div className="mx-auto max-w-6xl px-4">
+      <section id="pricing" className="relative z-20 bg-slate-200/75 py-8 backdrop-blur-[2px]">
+        <div className="mx-auto max-w-5xl px-4">
           <div className="text-center">Loading...</div>
         </div>
       </section>
@@ -116,15 +116,15 @@ export function PricingSection() {
   }
 
   return (
-    <section id="pricing" className="relative z-20 bg-slate-200/75 py-14 backdrop-blur-[2px]">
-      <div className="mx-auto max-w-6xl px-4">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-extrabold text-gray-900">Pricing</h2>
-          <p className="mt-3 text-lg text-gray-600">
+    <section id="pricing" className="relative z-20 bg-slate-200/75 py-8 backdrop-blur-[2px]">
+      <div className="mx-auto max-w-5xl px-4">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-extrabold text-gray-900">Pricing</h2>
+          <p className="mt-1.5 text-sm text-gray-600">
             Start free. Upgrade when you're ready. Cancel anytime.
           </p>
           {currentTier !== 'free' && (
-            <div className="mt-4 inline-block rounded-full bg-green-100 px-4 py-2">
+            <div className="mt-2 inline-block rounded-full bg-green-100 px-3 py-1">
               <p className="text-sm font-semibold text-green-800">
                 Current plan: <span className="capitalize">{currentTier}</span>
               </p>
@@ -132,7 +132,7 @@ export function PricingSection() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {PRICING_PLANS.map((plan) => {
             const isCurrentPlan = plan.tier === currentTier;
             const planTier = plan.tier ?? 'free';
@@ -145,34 +145,34 @@ export function PricingSection() {
                 key={plan.id}
                 className={`relative rounded-2xl transition-all duration-200 ${
                   plan.popular
-                    ? 'ring-2 ring-pink-500 transform md:scale-105 shadow-xl'
+                    ? 'ring-2 ring-pink-500 shadow-lg'
                     : 'ring-1 ring-gray-200'
-                } bg-white p-8`}
+                } bg-white p-5`}
               >
                 {plan.popular && (
                   <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                    <span className="inline-block rounded-full bg-pink-500 px-4 py-1 text-sm font-semibold text-white">
+                    <span className="inline-block rounded-full bg-pink-500 px-3 py-0.5 text-xs font-semibold text-white">
                       Most Popular
                     </span>
                   </div>
                 )}
 
-                <div className="mb-6">
-                  <h3 className="text-2xl font-bold text-gray-900">{plan.name}</h3>
-                  <p className="mt-2 text-sm text-gray-600">{plan.description}</p>
+                <div className="mb-3">
+                  <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
+                  <p className="mt-1 text-xs text-gray-600">{plan.description}</p>
                 </div>
 
-                <div className="mb-6">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-                    <span className="text-gray-600">{plan.period}</span>
+                <div className="mb-3">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-3xl font-bold text-gray-900">{plan.price}</span>
+                    <span className="text-sm text-gray-600">{plan.period}</span>
                   </div>
                 </div>
 
                 <button
                   onClick={() => handlePlanSelect(plan)}
                   disabled={isCurrentPlan || selectedPlan === plan.id}
-                  className={`w-full rounded-lg font-semibold py-3 px-4 mb-6 transition-colors ${
+                  className={`w-full rounded-lg text-sm font-semibold py-2 px-3 mb-3 transition-colors ${
                     isCurrentPlan
                       ? 'bg-gray-100 text-gray-400 cursor-default'
                       : selectedPlan === plan.id
@@ -191,13 +191,13 @@ export function PricingSection() {
                   )}
                 </button>
 
-                <div className="space-y-3">
+                <div className="space-y-1.5 text-sm">
                   {plan.features.map((feature, idx) => (
-                    <div key={idx} className="flex items-center gap-3">
+                    <div key={idx} className="flex items-center gap-2">
                       {feature.included ? (
-                        <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                        <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                       ) : (
-                        <Lock className="h-5 w-5 text-gray-300 flex-shrink-0" />
+                        <Lock className="h-4 w-4 text-gray-300 flex-shrink-0" />
                       )}
                       <span
                         className={feature.included ? 'text-gray-700' : 'text-gray-400'}
@@ -208,7 +208,7 @@ export function PricingSection() {
                   ))}
                 </div>
 
-                <div className="mt-6 pt-6 border-t border-gray-200">
+                <div className="mt-3 pt-3 border-t border-gray-200">
                   <p className="text-xs text-gray-500 text-center">
                     Secure payments • Cancel anytime
                   </p>
@@ -218,8 +218,8 @@ export function PricingSection() {
           })}
         </div>
 
-        <div className="mt-12 text-center">
-          <p className="text-gray-600">
+        <div className="mt-5 text-center">
+          <p className="text-sm text-gray-600">
             Questions about plans?{' '}
             <a href="/contact" className="font-semibold text-gray-900 hover:text-pink-500">
               Contact us
