@@ -390,18 +390,28 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
           </div>
           <div className={card + " overflow-x-auto p-0"}>
             <table className="w-full text-sm">
-              <thead className="text-left text-slate-400"><tr><th className="p-3">Time</th><th>Purpose</th><th>To</th><th>State</th><th>Segments</th></tr></thead>
+              <thead className="text-left text-slate-400"><tr><th className="p-3">Time</th><th>Purpose</th><th>To</th><th>State</th><th>Segments</th>{admin && <th>Resolve</th>}</tr></thead>
               <tbody>
-                {messages.length === 0 ? <tr><td colSpan={5} className="p-4 text-slate-400">No messages.</td></tr> : messages.map((m) => (
+                {messages.length === 0 ? <tr><td colSpan={admin ? 6 : 5} className="p-4 text-slate-400">No messages.</td></tr> : messages.map((m) => (
                   <tr key={m.id} className="border-t border-white/5">
                     <td className="p-3 whitespace-nowrap">{new Date(m.createdAt).toLocaleString()}</td><td>{m.purpose}</td><td className="font-mono">•••{m.recipientLast4}</td><td><Badge value={m.state} /></td><td>{m.segments}</td>
+                    {admin && (
+                      <td className="whitespace-nowrap pr-3">
+                        {m.state === "uncertain" ? (
+                          <span className="flex gap-1">
+                            <button className={btnGhost} title="Twilio confirms it was sent" onClick={() => act("Marked sent", () => manage("POST", `/admin/sms/messages/${m.id}/reconcile`, { outcome: "sent" }), () => loadMessages(false))}>Was sent</button>
+                            <button className={btnGhost} title="Twilio confirms it was NOT sent. Nothing is resent automatically." onClick={() => act("Marked not sent", () => manage("POST", `/admin/sms/messages/${m.id}/reconcile`, { outcome: "not_sent" }), () => loadMessages(false))}>Not sent</button>
+                          </span>
+                        ) : null}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           {nextBefore && <button className={btnGhost} onClick={() => loadMessages(true, nextBefore)}>Load more</button>}
-          <p className="text-xs text-slate-500">Only the last four digits of a number are stored. Message bodies are never stored.</p>
+          <p className="text-xs text-slate-500">Only the last four digits of a number are kept. Recipient and text are held encrypted in the outbox only until dispatch, then erased.</p>
         </div>
       )}
 

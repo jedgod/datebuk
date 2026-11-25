@@ -72,7 +72,7 @@ const stepUp = (userId: string, opts: { expiresIn?: number | string; purpose?: s
   jwt.sign({ sub: userId, temp: opts.temp ?? true, purpose: opts.purpose ?? "step-up" }, { expiresIn: (opts.expiresIn ?? 300) as any });
 
 const READ = ["list", "history", "analytics", "audit", "webhookConfig"] as const;
-const MANAGE_STEPUP = ["register", "activate", "suspend", "revoke", "rotate", "spending", "migrate", "registerSender", "disableSender"] as const;
+const MANAGE_STEPUP = ["register", "activate", "suspend", "revoke", "rotate", "spending", "migrate", "reconcile", "registerSender", "disableSender"] as const;
 
 const ENV = { ...process.env };
 beforeEach(() => {

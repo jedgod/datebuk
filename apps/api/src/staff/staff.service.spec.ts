@@ -7,7 +7,15 @@ import { hashSecret } from "../common/security/hash";
  * against the stored hash, so any string was accepted as "the current password" and
  * the account password was overwritten unconditionally.
  */
+// bcrypt at the production cost (12) takes seconds on a loaded machine; hash once and allow for it.
+jest.setTimeout(60_000);
+
 describe("StaffService.changePassword", () => {
+  let realHash: string;
+  beforeAll(async () => {
+    realHash = await hashSecret("the-real-current-password");
+  });
+
   async function buildService(storedPasswordHash: string) {
     const prisma = {
       user: {
@@ -27,7 +35,7 @@ describe("StaffService.changePassword", () => {
   }
 
   it("rejects the change when currentPassword does not match the stored hash", async () => {
-    const storedHash = await hashSecret("the-real-current-password");
+    const storedHash = realHash;
     const { service, prisma } = await buildService(storedHash);
 
     await expect(
@@ -37,7 +45,7 @@ describe("StaffService.changePassword", () => {
   });
 
   it("accepts the change when currentPassword matches the stored hash", async () => {
-    const storedHash = await hashSecret("the-real-current-password");
+    const storedHash = realHash;
     const { service, prisma } = await buildService(storedHash);
 
     await expect(
@@ -52,7 +60,7 @@ describe("StaffService.changePassword", () => {
   });
 
   it("does not revoke sessions or update anything when the current password is wrong", async () => {
-    const storedHash = await hashSecret("the-real-current-password");
+    const storedHash = realHash;
     const { service, prisma } = await buildService(storedHash);
     await expect(service.changePassword("u1", "wrong", "brandNewPassw0rd")).rejects.toBeDefined();
     expect(prisma.user.update).not.toHaveBeenCalled();

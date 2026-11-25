@@ -5,6 +5,7 @@ import { PermissionsGuard } from "../auth/permissions.guard";
 import { StepUpGuard } from "../auth/step-up.guard";
 import { RequirePermissions } from "../auth/require-permissions.decorator";
 import { SmsAccountsService } from "./sms-accounts.service";
+import { SmsOutboxService } from "./sms-outbox.service";
 import { DcgEnabledGuard } from "./dcg-enabled.guard";
 
 const actor = (req: any) => ({ userId: req.user.userId as string, ip: req.ip as string, userAgent: req.headers["user-agent"] as string });
@@ -20,7 +21,7 @@ const actor = (req: any) => ({ userId: req.user.userId as string, ip: req.ip as 
 @Controller("admin/sms")
 @UseGuards(DcgEnabledGuard, JwtAuthGuard, PermissionsGuard)
 export class SmsAdminController {
-  constructor(private accounts: SmsAccountsService) {}
+  constructor(private accounts: SmsAccountsService, private outbox: SmsOutboxService) {}
 
   // ---- read (staff + superadmin) ----
 
@@ -118,6 +119,18 @@ export class SmsAdminController {
   @Post("credentials/migrate")
   migrate(@Req() req: any, @Query("dryRun") dryRun?: string) {
     return this.accounts.migrate(dryRun === "true", actor(req));
+  }
+
+  /**
+   * Resolve a message whose outcome is unknown (`uncertain`) after checking with Twilio.
+   * Nothing is ever resent automatically: "not_sent" only records the fact (and frees its budget).
+   */
+  @RequirePermissions("ADMIN_MANAGE_MESSAGING")
+  @UseGuards(StepUpGuard)
+  @Post("messages/:id/reconcile")
+  reconcile(@Req() req: any, @Param("id", new ParseUUIDPipe()) id: string, @Body() body: { outcome?: string }) {
+    if (body?.outcome !== "sent" && body?.outcome !== "not_sent") throw new NotFoundException("outcome must be sent or not_sent");
+    return this.outbox.reconcile(id, body.outcome, actor(req));
   }
 
   @RequirePermissions("ADMIN_MANAGE_MESSAGING")

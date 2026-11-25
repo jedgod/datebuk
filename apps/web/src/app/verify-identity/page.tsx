@@ -12,7 +12,7 @@ type Status = {
   attemptsLeft: number;
 };
 
-type StartResponse = { delivery: "sent" | "logged"; phoneLast4: string; expiresAt: string };
+type StartResponse = { delivery: "queued" | "logged"; phoneLast4: string; expiresAt: string };
 
 // Registration step 2 (web): collect a mobile number and text a one-time link so the user
 // can scan their ID and take a selfie on their phone. This page then waits for the result.
@@ -134,9 +134,9 @@ export default function VerifyIdentityPage() {
         {!approved && sent && (
           <div className="mt-4 space-y-4">
             <p className="rounded-lg bg-purple-50 p-4 text-purple-900">
-              {sent.delivery === "sent"
-                ? `We texted a link to the number ending in ${sent.phoneLast4}. It's valid for 30 minutes.`
-                : "Text messaging isn't configured on this server yet (development), so no SMS was sent. The link was written to the API log."}
+              {sent.delivery === "queued"
+                ? `We're texting a link to the number ending in ${sent.phoneLast4}. It should arrive within a minute and is valid for 30 minutes.`
+                : "Text messaging isn't switched on for this server yet (development), so no SMS was sent. The link was written to the API log."}
             </p>
             <p className="text-sm text-gray-600">
               Keep this page open — it updates automatically once you finish on your phone.

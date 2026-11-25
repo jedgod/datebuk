@@ -1500,17 +1500,49 @@ model SmsSuppression {
 }
 
 model SmsMessage {
-  id            String   @id @default(uuid())
-  accountId     String?
-  segments      Int      @default(1)
-  userId        String?
-  purpose       String
+  id             String   @id @default(uuid())
+  accountId      String?
+  segments       Int      @default(1)
+  userId         String?
+  purpose        String
+  // Business reference the message belongs to (e.g. the IdentityVerification id). Lets the
+  // dispatcher re-check, right before sending, that the message is still wanted.
+  ref            String?
   recipientLast4 String
-  providerSid   String?  @unique
-  state         String   @default("queued")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  providerSid    String?  @unique
+  // queued -> dispatching -> accepted -> sending -> sent -> delivered | undelivered | failed
+  // dispatching -> uncertain (ambiguous result; NEVER retried, resolved by a signed webhook or an admin)
+  // see sms/sms-state.ts for the full transition table
+  state          String   @default("queued")
+  // Outbox payload: AES-256-GCM via the credential vault, bound to this row. Erased the moment
+  // the message leaves queued/dispatching, so nothing readable is retained after dispatch.
+  toEncrypted    String?
+  bodyEncrypted  String?
+  // Caller-supplied; the same key can only ever create one message.
+  idempotencyKey String?  @unique
+  attempts       Int      @default(0)
+  nextAttemptAt  DateTime @default(now())
+  leaseUntil     DateTime?
+  claimedBy      String?
+  lastError      String?
+  // After this the message is cancelled rather than sent late (e.g. a 30-minute verification link).
+  expiresAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([userId])
   @@index([accountId, createdAt])
+  @@index([state, nextAttemptAt])
+}
+
+// One row per distinct provider callback (account + message + status). A replay hits the unique
+// key and is acknowledged without being applied twice.
+model SmsWebhookEvent {
+  eventKey    String   @id
+  accountSid  String
+  providerSid String
+  status      String
+  receivedAt  DateTime @default(now())
+
+  @@index([providerSid])
 }

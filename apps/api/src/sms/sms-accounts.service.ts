@@ -84,6 +84,13 @@ export class SmsAccountsService {
     return a ? this.webhookToken(a) : null;
   }
 
+  /** Which of OUR accounts a signed callback claims to be from, plus the token that account signs with. */
+  async webhookAuthFor(accountSid: string): Promise<{ accountId: string; token: string } | null> {
+    const a = await this.prisma.twilioAccount.findUnique({ where: { accountSid } });
+    const token = a ? this.webhookToken(a) : null;
+    return a && token ? { accountId: a.id, token } : null;
+  }
+
   private encryptFields(id: string, c: NewCredentials) {
     const out: { encryptedAuthToken?: string; apiKeySid?: string; encryptedApiKeySecret?: string } = {};
     if (c.authToken) out.encryptedAuthToken = vaultEncrypt(c.authToken, credentialContext(id, "authToken")).payload;

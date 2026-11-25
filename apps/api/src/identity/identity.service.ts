@@ -7,6 +7,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleInit,
 } from "@nestjs/common";
 import { createHash, randomBytes, randomInt } from "crypto";
 import sharp from "sharp";
@@ -15,6 +16,7 @@ import { AuditService } from "../common/audit/audit.service";
 import { Challenge, DEFAULT_FACE_THRESHOLD, decide } from "./decision";
 import { IDENTITY_PROVIDER, type IdentityProvider } from "./providers/identity-provider";
 import { E164, SmsService, type SmsDelivery } from "../sms/sms.service";
+import { SmsOutboxService } from "../sms/sms-outbox.service";
 
 const TOKEN_TTL_MS = 30 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
@@ -26,15 +28,31 @@ export type CaptureFiles = { idFront: Buffer; selfie: Buffer; selfieChallenge: B
 const sha256 = (v: string) => createHash("sha256").update(v).digest("hex");
 
 @Injectable()
-export class IdentityService {
+export class IdentityService implements OnModuleInit {
   private readonly log = new Logger(IdentityService.name);
 
   constructor(
     private prisma: PrismaService,
     private sms: SmsService,
     private audit: AuditService,
+    private outbox: SmsOutboxService,
     @Inject(IDENTITY_PROVIDER) private provider: IdentityProvider,
   ) {}
+
+  onModuleInit() {
+    // Re-checked by the SMS dispatcher immediately before the text goes out: don't send a
+    // verification link that is no longer wanted (already used, expired, replaced, or the user
+    // is already verified).
+    this.outbox.registerPurposeGuard("identity_link", async ({ ref }) => {
+      if (!ref) return "no_reference";
+      const s = await this.prisma.identityVerification.findUnique({ where: { id: ref }, select: { status: true, tokenExpiresAt: true, userId: true } });
+      if (!s) return "session_missing";
+      if (s.status !== "PENDING_CAPTURE") return "session_no_longer_pending";
+      if (s.tokenExpiresAt.getTime() < Date.now()) return "session_expired";
+      const u = await this.prisma.user.findUnique({ where: { id: s.userId }, select: { identityVerifiedAt: true } });
+      return u?.identityVerifiedAt ? "already_verified" : null;
+    });
+  }
 
   private newChallenge(): Challenge {
     return CHALLENGES[randomInt(CHALLENGES.length)];
@@ -93,7 +111,7 @@ export class IdentityService {
       delivery = await this.sms.send(
         e164,
         `DateBuk: verify your identity (valid 30 min). Have your government ID ready and open: ${this.captureUrl(token)}`,
-        { purpose: "identity_link", userId },
+        { purpose: "identity_link", userId, ref: session.id, idempotencyKey: `identity-link:${session.id}`, ttlSeconds: TOKEN_TTL_MS / 1000 },
       );
     } catch (err) {
       await this.prisma.identityVerification.update({
