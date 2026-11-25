@@ -36,6 +36,7 @@ import { SettingsModule } from "./settings/settings.module";
 import { VerificationModule } from "./verification/verification.module";
 import { IdentityModule } from "./identity/identity.module";
 import { SmsModule } from "./sms/sms.module";
+import { OtpModule } from "./otp/otp.module";
 import { SafetyModule } from "./safety/safety.module";
 import { CallsModule } from "./calls/calls.module";
 import { AdminIpAllowlistGuard } from "./common/guards/admin-ip-allowlist.guard";
@@ -77,6 +78,7 @@ import { AdminIpAllowlistGuard } from "./common/guards/admin-ip-allowlist.guard"
     VerificationModule,
     IdentityModule,
     SmsModule,
+    OtpModule,
     SafetyModule,
     CallsModule,
   ],

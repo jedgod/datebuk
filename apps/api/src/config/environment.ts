@@ -62,6 +62,10 @@ export function validateEnvironment(env: Record<string, unknown>) {
       if (String(env.DCG_ENCRYPTION_KEY).trim() === String(env.TOTP_ENCRYPTION_KEY || "").trim()) {
         throw new Error("DCG_ENCRYPTION_KEY must differ from TOTP_ENCRYPTION_KEY");
       }
+      const hmacKey = Buffer.from(String(env.DCG_HMAC_KEY || "").trim(), "base64");
+      if (hmacKey.length !== 32) throw new Error("DCG_HMAC_KEY must be 32 random bytes, base64-encoded (it keys recipient/consent/OTP hashes)");
+      if (String(env.DCG_HMAC_KEY).trim() === String(env.DCG_ENCRYPTION_KEY).trim()) throw new Error("DCG_HMAC_KEY must differ from DCG_ENCRYPTION_KEY");
+      if (String(env.DCG_DEV_LOG_BODIES || "").toLowerCase() === "true") throw new Error("DCG_DEV_LOG_BODIES must not be enabled in production");
       if (String(env.DCG_WEBHOOK_SIGNATURE_REQUIRED || "true").toLowerCase() === "false") {
         throw new Error("DCG_WEBHOOK_SIGNATURE_REQUIRED cannot be false in production");
       }

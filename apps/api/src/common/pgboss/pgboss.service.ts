@@ -32,7 +32,7 @@ export class PgBossService implements OnModuleInit, OnModuleDestroy {
     // pg-boss requires a queue to be created before send()/work() will accept it —
     // unlike older versions, it no longer auto-creates queues on first use.
     // createQueue is idempotent, so it's safe to call on every boot.
-    for (const queue of ["email", "push", "uploads", "broadcast", "sms-dispatch"]) {
+    for (const queue of ["email", "push", "uploads", "broadcast", "sms-dispatch", "sms-reconcile"]) {
       await this.boss.createQueue(queue);
     }
 

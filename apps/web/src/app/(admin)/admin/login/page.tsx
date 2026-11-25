@@ -43,6 +43,13 @@ export default function AdminLoginPage() {
         return;
       }
 
+      // MFA: continue on the code / enrolment screen, then return to where the admin was headed.
+      if (data.requiresOtp || data.mustSetupMfa) {
+        const q = `userId=${encodeURIComponent(data.userId)}&tempToken=${encodeURIComponent(data.tempToken)}&next=${encodeURIComponent(data.redirectUrl || next)}`;
+        router.push(`${data.requiresOtp ? "/auth/verify-otp" : "/auth/setup-mfa"}?${q}`);
+        return;
+      }
+
       // Populate the shared auth store so accessToken-based calls (staff/directory,
       // admin/dashboard, etc.) work immediately without a page reload.
       setTokens(data.token, data.refreshToken || null, data.userId || null);

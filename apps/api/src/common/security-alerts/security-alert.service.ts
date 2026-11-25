@@ -61,6 +61,11 @@ export class SecurityAlertService {
     });
   }
 
+  /** Operational alert from another module (e.g. communications health). De-duplicated like all alerts. */
+  raise(ruleId: string, severity: AlertSeverity, summary: string, evidence?: unknown, actorUserId?: string | null) {
+    return this.createAlert({ ruleId, severity, summary, evidence, actorUserId: actorUserId ?? null });
+  }
+
   // Called after every AuditLog write (see AuditService.log) — best-effort, never allowed
   // to throw back into the caller's hot path.
   async evaluateAuditEvent(entry: { action: string; actorUserId: string | null; ip: string | null }) {

@@ -54,6 +54,7 @@ export default function SetupMfaPage() {
       }
       const data = await res.json();
       setTokens(data.accessToken, data.refreshToken, data.userId);
+      await fetch('/api/auth/establish-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accessToken: data.accessToken }) });
       router.push(data.mustChangePassword ? '/auth/change-password' : nextPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed');

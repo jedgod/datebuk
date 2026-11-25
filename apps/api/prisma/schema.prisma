@@ -203,6 +203,7 @@ model User {
   heightCm          Int?
   // Mobile number the ID-verification link is texted to (E.164). Not shown to other users.
   phoneE164         String?
+  phoneVerifiedAt   DateTime?
   // Set only when ID document + selfie face match was accepted (see IdentityService).
   identityVerifiedAt DateTime?
   identityVerifications IdentityVerification[]
@@ -1479,6 +1480,7 @@ model TwilioAccount {
   createdBy          String?
   createdAt          DateTime @default(now())
   senders            TwilioSender[]
+  registrations      ComplianceRegistration[]
 }
 
 model TwilioSender {
@@ -1527,6 +1529,9 @@ model SmsMessage {
   lastError      String?
   // After this the message is cancelled rather than sent late (e.g. a 30-minute verification link).
   expiresAt      DateTime?
+  // Set when reconciliation could not match this message to a provider record; a human decides.
+  needsReview    Boolean  @default(false)
+  lastReconciledAt DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -1545,4 +1550,110 @@ model SmsWebhookEvent {
   receivedAt  DateTime @default(now())
 
   @@index([providerSid])
+}
+
+
+// ---- OTP / verification (DCG V12.2) -------------------------------------------------------
+// The code is never stored: only an HMAC bound to this challenge, its purpose, its recipient and its
+// user, keyed from the credential vault. The recipient is stored only as a keyed hash + last 4 digits.
+model OtpChallenge {
+  id             String    @id @default(uuid())
+  purpose        String    // phone_verify | recovery
+  userId         String?
+  recipientHash  String
+  recipientLast4 String
+  codeHmac       String
+  expiresAt      DateTime
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  consumedAt     DateTime?
+  lastSentAt     DateTime
+  ipHash         String?
+  deviceHash     String?
+  createdAt      DateTime  @default(now())
+
+  @@index([recipientHash, purpose, createdAt])
+  @@index([userId, purpose, createdAt])
+  @@index([ipHash, createdAt])
+  @@index([deviceHash, createdAt])
+  @@index([expiresAt])
+}
+
+// ---- Consent (DCG V13.1) -------------------------------------------------------------------
+// Current state per recipient + purpose; every change is also appended to SmsConsentEvent (immutable).
+model SmsConsent {
+  phoneHash     String
+  purpose       String
+  status        String   // granted | withdrawn
+  source        String
+  policyVersion String?
+  updatedAt     DateTime @updatedAt
+
+  @@id([phoneHash, purpose])
+}
+
+model SmsConsentEvent {
+  id             String   @id @default(uuid())
+  phoneHash      String
+  recipientLast4 String
+  purpose        String   // a purpose, or "*" for an all-purposes event (STOP/START)
+  action         String   // granted | withdrawn | stop | start
+  source         String
+  policyVersion  String?
+  createdAt      DateTime @default(now())
+
+  @@index([phoneHash, createdAt])
+}
+
+// ---- Fraud intelligence (DCG V13.0) ---------------------------------------------------------
+model SmsRiskEvent {
+  id          String    @id @default(uuid())
+  kind        String    // recipient_velocity | ip_velocity | device_velocity | user_velocity | sms_pumping | verification_failures
+  score       Int
+  severity    String    // low | medium | high
+  action      String    // observed | throttled | blocked
+  userId      String?
+  subjectHash String?
+  ipHash      String?
+  details     Json?
+  status      String    @default("open") // open | confirmed | dismissed
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([kind, createdAt])
+  @@index([status, createdAt])
+  @@index([ipHash, createdAt])
+}
+
+// ---- Provider compliance (DCG V13.2) --------------------------------------------------------
+// Records what an admin reports from Twilio / the carriers. Nothing here is generated or assumed.
+model ComplianceRegistration {
+  id           String    @id @default(uuid())
+  accountId    String
+  type         String    // A2P_10DLC_BRAND | A2P_10DLC_CAMPAIGN | TOLLFREE_VERIFICATION
+  status       String    @default("pending") // pending | approved | rejected | suspended | expired
+  brandId      String?
+  campaignId   String?
+  senderId     String?   // when set, applies to that sender only; otherwise the whole account
+  evidenceNote String?   // reference to the provider's approval (ticket/SID/date), required to approve
+  submittedAt  DateTime?
+  decidedAt    DateTime?
+  decidedBy    String?
+  expiresAt    DateTime?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  account      TwilioAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, type, status])
+}
+
+// ---- Runtime controls (emergency stop) ------------------------------------------------------
+model SmsControl {
+  key       String   @id
+  value     String
+  reason    String?
+  updatedBy String?
+  updatedAt DateTime @updatedAt
 }

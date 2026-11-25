@@ -55,11 +55,11 @@ export default function StaffLoginPage() {
       // Get the response data
       const data = await res.json();
       if (data.requiresOtp) {
-        router.push(`/auth/verify-otp?userId=${encodeURIComponent(data.userId)}&tempToken=${encodeURIComponent(data.tempToken)}`);
+        router.push(`/auth/verify-otp?userId=${encodeURIComponent(data.userId)}&tempToken=${encodeURIComponent(data.tempToken)}&next=${encodeURIComponent(searchParams?.get("next") || "/staff")}`);
         return;
       }
       if (data.mustSetupMfa) {
-        router.push(`/auth/setup-mfa?userId=${encodeURIComponent(data.userId)}&tempToken=${encodeURIComponent(data.tempToken)}`);
+        router.push(`/auth/setup-mfa?userId=${encodeURIComponent(data.userId)}&tempToken=${encodeURIComponent(data.tempToken)}&next=${encodeURIComponent(searchParams?.get("next") || "/staff")}`);
         return;
       }
       setTokens(data.accessToken, data.refreshToken || null);

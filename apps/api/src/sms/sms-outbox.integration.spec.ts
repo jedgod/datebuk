@@ -10,8 +10,10 @@ import { randomBytes, randomUUID } from "crypto";
 import { SmsAccountsService } from "./sms-accounts.service";
 import { SmsOutboxService } from "./sms-outbox.service";
 import { SmsWebhookController } from "./sms-webhook.controller";
+import { ConsentService } from "./consent.service";
 import { expectedTwilioSignature } from "./twilio-signature";
 import { credentialContext, vaultEncrypt } from "../common/security/credential-vault";
+import { createAccountWithRetry } from "./it-db";
 
 /**
  * Integration tests against the REAL PostgreSQL database in DATABASE_URL (apps/api/.env).
@@ -42,7 +44,7 @@ run("SMS outbox + webhooks (real PostgreSQL)", () => {
     const id = randomUUID();
     const sid = "AC" + hex(32);
     const token = "tok_" + hex(40);
-    await prisma.twilioAccount.create({
+    await createAccountWithRetry(prisma, {
       data: {
         id,
         name: "itest-" + id.slice(0, 6),
@@ -73,7 +75,8 @@ run("SMS outbox + webhooks (real PostgreSQL)", () => {
   const sidFor = () => "SM" + hex(32);
 
   beforeAll(async () => {
-    blocked = (await prisma.twilioAccount.count({ where: { status: "active" } })) > 0;
+    // Only a REAL active provider blocks these tests; other specs' temporary "itest-" accounts just take turns.
+    blocked = (await prisma.twilioAccount.count({ where: { status: "active", NOT: { name: { startsWith: "itest-" } } } })) > 0;
   });
 
   beforeEach(() => {
@@ -90,7 +93,7 @@ run("SMS outbox + webhooks (real PostgreSQL)", () => {
     };
     accounts = new SmsAccountsService(prisma as any, audit);
     outbox = new SmsOutboxService(prisma as any, accounts, audit, boss);
-    webhook = new SmsWebhookController(prisma as any, accounts);
+    webhook = new SmsWebhookController(prisma as any, accounts, new ConsentService(prisma as any));
     fetchSpy = jest.spyOn(globalThis, "fetch").mockImplementation(() => reply(201, { sid: sidFor() }) as any);
     boss.add.mockClear();
   });

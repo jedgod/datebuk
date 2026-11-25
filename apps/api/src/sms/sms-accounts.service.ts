@@ -468,16 +468,17 @@ export class SmsAccountsService {
     );
   }
 
-  async history(opts: { state?: string; limit?: number; before?: string }) {
+  async history(opts: { state?: string; limit?: number; before?: string; needsReview?: boolean }) {
     const take = Math.min(Math.max(opts.limit ?? 50, 1), 200);
     const rows = await this.prisma.smsMessage.findMany({
       where: {
         ...(opts.state ? { state: opts.state } : {}),
+        ...(opts.needsReview ? { needsReview: true } : {}),
         ...(opts.before && !Number.isNaN(Date.parse(opts.before)) ? { createdAt: { lt: new Date(opts.before) } } : {}),
       },
       orderBy: { createdAt: "desc" },
       take,
-      select: { id: true, createdAt: true, purpose: true, recipientLast4: true, state: true, segments: true, accountId: true, providerSid: true },
+      select: { id: true, createdAt: true, purpose: true, recipientLast4: true, state: true, segments: true, accountId: true, providerSid: true, needsReview: true, lastError: true },
     });
     return { items: rows, nextBefore: rows.length === take ? rows[rows.length - 1].createdAt.toISOString() : null };
   }

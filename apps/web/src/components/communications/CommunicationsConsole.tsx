@@ -14,7 +14,7 @@ import { useAuth } from "@/stores/auth";
  */
 
 type Mode = "admin" | "staff";
-type Tab = "overview" | "accounts" | "messages" | "audit" | "webhooks";
+type Tab = "overview" | "health" | "accounts" | "messages" | "fraud" | "compliance" | "audit" | "webhooks";
 
 type Account = {
   id: string;
@@ -47,6 +47,21 @@ type Analytics = {
 type Msg = { id: string; createdAt: string; purpose: string; recipientLast4: string; state: string; segments: number; providerSid: string | null };
 type AuditItem = { id: string; action: string; actorUserId: string | null; createdAt: string; ip: string | null; metadata: any };
 type WebhookCfg = { baseUrl: string | null; httpsOk: boolean; statusUrl: string | null; inboundUrl: string | null; signatureRequired: boolean; flags: { enabled: boolean; liveSms: boolean; envFallback: boolean }; note: string };
+
+type Health = {
+  at: string;
+  queue: { queued: number; dueNow: number; dispatching: number; oldestDueAgeSeconds: number };
+  reconciliation: { uncertain: number; needsReview: number; oldestUncertainAgeSeconds: number };
+  delivery: { last24h: { total: number; byState: Record<string, number>; failureRatePct: number | null; medianLatencySeconds: number | null } };
+  budget: { accountId: string; name: string; segmentsToday: number; dailyLimit: number | null; pct: number | null }[];
+  security: { webhookRejections5m: number; openRiskEvents: number; highRiskEventsLastHour: number; otpRequestsLastHour: number };
+  worker: { sweepsLast10m: number };
+  control: { stopped: boolean; reason: string | null };
+};
+type AlertRow = { id: string; ruleId: string; severity: string; summary: string; status: string; createdAt: string };
+type RiskRow = { id: string; kind: string; score: number; severity: string; action: string; status: string; createdAt: string; subjectHash: string | null; ipHash: string | null };
+type Reg = { id: string; accountId: string; type: string; status: string; brandId: string | null; campaignId: string | null; senderId: string | null; evidenceNote: string | null; expiresAt: string | null; submittedAt: string | null };
+type ConsentView = { current: { purpose: string; status: string; source: string; policyVersion: string | null; updatedAt: string }[]; events: { id: string; recipientLast4: string; purpose: string; action: string; source: string; policyVersion: string | null; createdAt: string }[] };
 
 class ApiFail extends Error {
   constructor(public status: number, message: string, public code?: string) {
@@ -95,6 +110,16 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [webhooks, setWebhooks] = useState<WebhookCfg | null>(null);
   const [days, setDays] = useState(7);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [alertRows, setAlertRows] = useState<AlertRow[]>([]);
+  const [riskRows, setRiskRows] = useState<RiskRow[]>([]);
+  const [regs, setRegs] = useState<Reg[]>([]);
+  const [reviewMsgs, setReviewMsgs] = useState<Msg[]>([]);
+  const [consentPhone, setConsentPhone] = useState("");
+  const [consentView, setConsentView] = useState<ConsentView | null>(null);
+  const [regForm, setRegForm] = useState({ accountId: "", type: "A2P_10DLC_BRAND", brandId: "", campaignId: "", expiresAt: "" });
+  const [evidence, setEvidence] = useState<{ reg: Reg; to: string } | null>(null);
+  const [evidenceText, setEvidenceText] = useState("");
 
   // ---- step-up (MFA re-confirmation) ----
   const stepUp = useRef<{ token: string; expires: number } | null>(null);
@@ -202,14 +227,36 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
   const loadAudit = useCallback(() => guard(async () => setAudit((await rawCall("GET", "/admin/sms/audit?limit=100")).items)), [rawCall]); // eslint-disable-line react-hooks/exhaustive-deps
   const loadWebhooks = useCallback(() => guard(async () => setWebhooks(await rawCall("GET", "/admin/sms/webhook-config"))), [rawCall]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const loadHealth = useCallback(
+    () =>
+      guard(async () => {
+        setHealth(await rawCall("GET", "/admin/sms/health"));
+        setAlertRows((await rawCall("GET", "/admin/sms/alerts")).items);
+        setReviewMsgs((await rawCall("GET", "/admin/sms/messages/needs-review")).items);
+      }),
+    [rawCall], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const loadFraud = useCallback(() => guard(async () => setRiskRows((await rawCall("GET", "/admin/sms/risk-events")).items)), [rawCall]); // eslint-disable-line react-hooks/exhaustive-deps
+  const loadCompliance = useCallback(
+    () =>
+      guard(async () => {
+        setRegs((await rawCall("GET", "/admin/sms/compliance")).items);
+        setAccounts((await rawCall("GET", "/admin/sms/accounts")).accounts);
+      }),
+    [rawCall], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   useEffect(() => {
     if (!accessToken) return;
+    if (tab === "health") void loadHealth();
+    if (tab === "fraud") void loadFraud();
+    if (tab === "compliance") void loadCompliance();
     if (tab === "overview") void loadAnalytics();
     if (tab === "accounts") void loadAccounts();
     if (tab === "messages") void loadMessages(false);
     if (tab === "audit") void loadAudit();
     if (tab === "webhooks") void loadWebhooks();
-  }, [accessToken, tab, loadAnalytics, loadAccounts, loadMessages, loadAudit, loadWebhooks]);
+  }, [accessToken, tab, loadAnalytics, loadAccounts, loadMessages, loadAudit, loadWebhooks, loadHealth, loadFraud, loadCompliance]);
 
   // ---- actions (admin) ----
   const act = async (label: string, f: () => Promise<unknown>, after?: () => unknown) => {
@@ -234,8 +281,11 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
   const tabs: { id: Tab; label: string }[] = useMemo(
     () => [
       { id: "overview", label: "Overview" },
+      { id: "health", label: "Health & alerts" },
       { id: "accounts", label: "Provider accounts" },
       { id: "messages", label: "Message history" },
+      { id: "fraud", label: "Fraud & consent" },
+      { id: "compliance", label: "Compliance" },
       { id: "audit", label: "Audit" },
       { id: "webhooks", label: "Webhooks" },
     ],
@@ -245,7 +295,8 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
   const admin = mode === "admin";
 
   return (
-    <div className="space-y-5 text-slate-100">
+    // Own dark surface: the console is styled for dark and is mounted inside layouts with light content areas.
+    <div className="space-y-5 rounded-2xl bg-slate-900 p-4 text-slate-100 md:p-6">
       <div>
         <h1 className="text-2xl font-bold">{admin ? "Communications Center" : "Communications Operations"}</h1>
         <p className="text-sm text-slate-400">
@@ -455,6 +506,130 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
         </div>
       )}
 
+      {/* ---------- Health & alerts ---------- */}
+      {tab === "health" && (
+        <div className="space-y-4">
+          {!health ? <p className="text-slate-400">Loading…</p> : (
+            <>
+              {health.control.stopped && (
+                <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-200">
+                  <b>Emergency stop is ON</b>{health.control.reason ? ` - ${health.control.reason}` : ""}. Nothing new is being sent; queued messages are waiting.
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <Stat label="Queued (due now)" value={`${health.queue.queued} (${health.queue.dueNow})`} warn={health.queue.dueNow > 0 && health.queue.oldestDueAgeSeconds > 300} hint="Oldest due message age shown below" />
+                <Stat label="Oldest due" value={`${health.queue.oldestDueAgeSeconds}s`} />
+                <Stat label="Uncertain" value={health.reconciliation.uncertain} warn={health.reconciliation.uncertain > 0} />
+                <Stat label="Needs review" value={health.reconciliation.needsReview} warn={health.reconciliation.needsReview > 0} />
+                <Stat label="Failure rate 24h" value={health.delivery.last24h.failureRatePct == null ? "-" : `${health.delivery.last24h.failureRatePct}%`} />
+                <Stat label="Median delivery" value={health.delivery.last24h.medianLatencySeconds == null ? "-" : `${health.delivery.last24h.medianLatencySeconds}s`} />
+                <Stat label="Signature rejections 5m" value={health.security.webhookRejections5m} warn={health.security.webhookRejections5m > 0} />
+                <Stat label="Open fraud events" value={health.security.openRiskEvents} warn={health.security.openRiskEvents > 0} />
+              </div>
+              <div className={card}>
+                <h3 className="mb-2 font-semibold">Spending today</h3>
+                {health.budget.length === 0 ? <p className="text-sm text-slate-400">No provider accounts.</p> : health.budget.map((b) => (
+                  <div key={b.accountId} className="mb-2 text-sm">
+                    <div className="flex justify-between"><span>{b.name}</span><span>{b.segmentsToday}{b.dailyLimit ? ` / ${b.dailyLimit}` : " (no cap)"} segments</span></div>
+                    {b.pct != null && <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10"><div className={`h-full ${b.pct >= 100 ? "bg-red-400" : b.pct >= 80 ? "bg-amber-400" : "bg-emerald-400"}`} style={{ width: `${Math.min(100, b.pct)}%` }} /></div>}
+                  </div>
+                ))}
+              </div>
+              {admin && (
+                <div className={card + " flex flex-wrap items-center gap-2"}>
+                  <button className={health.control.stopped ? btnPrimary : btnDanger} onClick={() => {
+                    if (health.control.stopped) void act("Emergency stop released", () => manage("POST", "/admin/sms/emergency-stop", { on: false }), loadHealth);
+                    else { const reason = prompt("Reason for the emergency stop (recorded in the audit log)?"); if (reason) void act("Emergency stop engaged", () => manage("POST", "/admin/sms/emergency-stop", { on: true, reason }), loadHealth); }
+                  }}>{health.control.stopped ? "Release emergency stop" : "EMERGENCY STOP - halt all SMS"}</button>
+                  <button className={btnGhost} onClick={() => act("Reconciliation run", async () => { const r = await manage("POST", "/admin/sms/reconcile/run"); setNotice(`Reconciliation: checked ${r.checked}, updated ${r.updated}, escalated ${r.escalated}${r.rateLimited ? " (provider rate-limited)" : ""}${r.skipped ? " (another worker holds the lease)" : ""}`); }, loadHealth)}>Run reconciliation now</button>
+                  <span className="text-xs text-slate-500">Reconciliation never resends a message.</span>
+                </div>
+              )}
+              <div className={card + " overflow-x-auto p-0"}>
+                <h3 className="p-3 font-semibold">Alerts</h3>
+                <table className="w-full text-sm"><thead className="text-left text-slate-400"><tr><th className="p-3">Time</th><th>Rule</th><th>Severity</th><th>Summary</th><th>Status</th></tr></thead>
+                  <tbody>{alertRows.length === 0 ? <tr><td colSpan={5} className="p-4 text-slate-400">No communications alerts.</td></tr> : alertRows.map((a) => (
+                    <tr key={a.id} className="border-t border-white/5"><td className="p-3 whitespace-nowrap">{new Date(a.createdAt).toLocaleString()}</td><td className="font-mono text-xs">{a.ruleId}</td><td><Badge value={a.severity === "critical" || a.severity === "high" ? "failed" : a.severity === "medium" ? "uncertain" : "queued"} /> {a.severity}</td><td>{a.summary}</td><td><Badge value={a.status === "open" ? "uncertain" : "delivered"} /> {a.status}</td></tr>
+                  ))}</tbody></table>
+                <p className="p-3 text-xs text-slate-500">Acknowledge and resolve alerts in the Security Alerts console; the same incident record is used.</p>
+              </div>
+              <div className={card + " overflow-x-auto p-0"}>
+                <h3 className="p-3 font-semibold">Messages needing review</h3>
+                <table className="w-full text-sm"><thead className="text-left text-slate-400"><tr><th className="p-3">Time</th><th>State</th><th>Detail</th>{admin && <th>Resolve</th>}</tr></thead>
+                  <tbody>{reviewMsgs.length === 0 ? <tr><td colSpan={admin ? 4 : 3} className="p-4 text-slate-400">Nothing to review.</td></tr> : reviewMsgs.map((m) => (
+                    <tr key={m.id} className="border-t border-white/5"><td className="p-3 whitespace-nowrap">{new Date(m.createdAt).toLocaleString()}</td><td><Badge value={m.state} /></td><td className="text-xs text-slate-400">{(m as any).lastError ?? ""}</td>
+                      {admin && <td className="whitespace-nowrap pr-3">{m.state === "uncertain" ? <span className="flex gap-1"><button className={btnGhost} onClick={() => act("Marked sent", () => manage("POST", `/admin/sms/messages/${m.id}/reconcile`, { outcome: "sent" }), loadHealth)}>Was sent</button><button className={btnGhost} onClick={() => act("Marked not sent", () => manage("POST", `/admin/sms/messages/${m.id}/reconcile`, { outcome: "not_sent" }), loadHealth)}>Not sent</button></span> : null}</td>}
+                    </tr>
+                  ))}</tbody></table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ---------- Fraud & consent ---------- */}
+      {tab === "fraud" && (
+        <div className="space-y-4">
+          <div className={card + " overflow-x-auto p-0"}>
+            <h3 className="p-3 font-semibold">Fraud events</h3>
+            <p className="px-3 pb-2 text-xs text-slate-500">Throttles and temporary blocks only - no account is ever suspended automatically. IPs and numbers are shown as short hash prefixes.</p>
+            <table className="w-full text-sm"><thead className="text-left text-slate-400"><tr><th className="p-3">Time</th><th>Kind</th><th>Score</th><th>Action</th><th>Status</th><th>Review</th></tr></thead>
+              <tbody>{riskRows.length === 0 ? <tr><td colSpan={6} className="p-4 text-slate-400">No fraud events.</td></tr> : riskRows.map((r) => (
+                <tr key={r.id} className="border-t border-white/5"><td className="p-3 whitespace-nowrap">{new Date(r.createdAt).toLocaleString()}</td><td className="font-mono text-xs">{r.kind}</td><td>{r.score}</td><td><Badge value={r.action === "blocked" ? "failed" : r.action === "throttled" ? "uncertain" : "queued"} /> {r.action}</td><td>{r.status}</td>
+                  <td className="whitespace-nowrap pr-3">{r.status === "open" ? <span className="flex gap-1"><button className={btnGhost} onClick={() => act("Event confirmed", () => rawCall("POST", `/admin/sms/risk-events/${r.id}/review`, { decision: "confirmed" }), loadFraud)}>Confirm</button><button className={btnGhost} onClick={() => act("Event dismissed", () => rawCall("POST", `/admin/sms/risk-events/${r.id}/review`, { decision: "dismissed" }), loadFraud)}>Dismiss</button></span> : null}</td></tr>
+              ))}</tbody></table>
+          </div>
+          <div className={card + " space-y-3"}>
+            <h3 className="font-semibold">Consent lookup</h3>
+            <p className="text-xs text-slate-500">Look up a recipient's consent and opt-out history. The number is sent in a request body (never a URL) and only the last four digits are shown. STOP always wins; staff cannot override an opt-out.</p>
+            <div className="flex gap-2">
+              <input className={input} placeholder="+14155550123" value={consentPhone} onChange={(e) => setConsentPhone(e.target.value)} autoComplete="off" />
+              <button className={btnPrimary} disabled={!consentPhone.trim()} onClick={() => guard(async () => setConsentView(await rawCall("POST", "/admin/sms/consent/lookup", { phone: consentPhone.trim() })))}>Look up</button>
+            </div>
+            {consentView && (
+              <div className="space-y-2 text-sm">
+                <p className="text-slate-400">Current state</p>
+                {consentView.current.length === 0 ? <p className="text-slate-500">No consent records.</p> : <ul>{consentView.current.map((c) => <li key={c.purpose} className="flex justify-between"><span className="font-mono text-xs">{c.purpose}</span><span><Badge value={c.status === "granted" ? "delivered" : "failed"} /> {c.source}{c.policyVersion ? ` · policy ${c.policyVersion}` : ""}</span></li>)}</ul>}
+                <p className="text-slate-400">History (newest first)</p>
+                <ul className="space-y-0.5">{consentView.events.map((e) => <li key={e.id} className="flex justify-between text-xs"><span>{new Date(e.createdAt).toLocaleString()} · •••{e.recipientLast4}</span><span><b>{e.action}</b> {e.purpose === "*" ? "(all)" : e.purpose} · {e.source}</span></li>)}</ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Compliance ---------- */}
+      {tab === "compliance" && (
+        <div className="space-y-4">
+          <div className={card + " text-sm text-slate-300"}>
+            <p>US messaging needs approved carrier registration: <b>A2P 10DLC</b> (brand + campaign) for local numbers and Messaging Services, or <b>toll-free verification</b> for toll-free numbers. Record what Twilio/the carriers report; approval requires an evidence reference. A sender without every required approval cannot send (enforced in production).</p>
+          </div>
+          {admin && (
+            <div className={card + " grid gap-2 md:grid-cols-3"}>
+              <select className={input} value={regForm.accountId} onChange={(e) => setRegForm({ ...regForm, accountId: e.target.value })}><option value="">Provider account…</option>{(accounts ?? []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+              <select className={input} value={regForm.type} onChange={(e) => setRegForm({ ...regForm, type: e.target.value })}><option value="A2P_10DLC_BRAND">A2P 10DLC - brand</option><option value="A2P_10DLC_CAMPAIGN">A2P 10DLC - campaign</option><option value="TOLLFREE_VERIFICATION">Toll-free verification</option></select>
+              <input className={input} placeholder="Brand ID (optional)" value={regForm.brandId} onChange={(e) => setRegForm({ ...regForm, brandId: e.target.value })} />
+              <input className={input} placeholder="Campaign ID (optional)" value={regForm.campaignId} onChange={(e) => setRegForm({ ...regForm, campaignId: e.target.value })} />
+              <input className={input} type="date" title="Expiry (optional)" value={regForm.expiresAt} onChange={(e) => setRegForm({ ...regForm, expiresAt: e.target.value })} />
+              <button className={btnPrimary} disabled={!regForm.accountId} onClick={() => act("Registration recorded", () => manage("POST", "/admin/sms/compliance", clean({ ...regForm, expiresAt: regForm.expiresAt ? new Date(regForm.expiresAt).toISOString() : "" })), loadCompliance)}>Record registration (pending)</button>
+            </div>
+          )}
+          <div className={card + " overflow-x-auto p-0"}>
+            <table className="w-full text-sm"><thead className="text-left text-slate-400"><tr><th className="p-3">Type</th><th>Account</th><th>Status</th><th>Identifiers</th><th>Evidence</th><th>Expires</th>{admin && <th>Update</th>}</tr></thead>
+              <tbody>{regs.length === 0 ? <tr><td colSpan={admin ? 7 : 6} className="p-4 text-slate-400">No registrations recorded.</td></tr> : regs.map((r) => (
+                <tr key={r.id} className="border-t border-white/5 align-top"><td className="p-3 font-mono text-xs">{r.type}</td><td>{(accounts ?? []).find((a) => a.id === r.accountId)?.name ?? r.accountId.slice(0, 8)}{r.senderId ? " (one sender)" : ""}</td><td><Badge value={r.status === "approved" ? "active" : r.status === "pending" ? "pending" : r.status === "rejected" || r.status === "suspended" ? "failed" : "revoked"} /> {r.status}</td><td className="text-xs text-slate-400">{[r.brandId && `brand ${r.brandId}`, r.campaignId && `campaign ${r.campaignId}`].filter(Boolean).join(" · ")}</td><td className="max-w-[220px] truncate text-xs text-slate-400" title={r.evidenceNote ?? ""}>{r.evidenceNote ?? ""}</td><td className="text-xs">{r.expiresAt ? new Date(r.expiresAt).toLocaleDateString() : ""}</td>
+                  {admin && <td className="whitespace-nowrap pr-3"><span className="flex flex-wrap gap-1">
+                    {r.status === "pending" && <><button className={btnPrimary} onClick={() => { setEvidenceText(""); setEvidence({ reg: r, to: "approved" }); }}>Approve…</button><button className={btnDanger} onClick={() => act("Marked rejected", () => manage("POST", `/admin/sms/compliance/${r.id}/status`, { status: "rejected", evidenceNote: "rejected by provider" }), loadCompliance)}>Rejected</button></>}
+                    {r.status === "approved" && <><button className={btnGhost} onClick={() => act("Marked suspended", () => manage("POST", `/admin/sms/compliance/${r.id}/status`, { status: "suspended" }), loadCompliance)}>Suspended</button></>}
+                    {r.status === "suspended" && <button className={btnPrimary} onClick={() => { setEvidenceText(""); setEvidence({ reg: r, to: "approved" }); }}>Reinstate…</button>}
+                    {(r.status === "rejected" || r.status === "expired") && <button className={btnGhost} onClick={() => act("Resubmitted", () => manage("POST", `/admin/sms/compliance/${r.id}/status`, { status: "pending" }), loadCompliance)}>Resubmit</button>}
+                  </span></td>}
+                </tr>
+              ))}</tbody></table>
+          </div>
+        </div>
+      )}
+
       {/* ---------- Dialogs ---------- */}
       {showRegister && (
         <Modal title="Register Twilio account" onClose={() => setShowRegister(false)}>
@@ -512,6 +687,16 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
           <div className="flex justify-end gap-2">
             <button className={btnGhost} onClick={() => setSenderFor(null)}>Cancel</button>
             <button className={btnPrimary} disabled={!snd.value.trim()} onClick={() => act("Sender added", () => manage("POST", "/admin/sms/senders", { accountId: senderFor.id, ...(snd.kind === "number" ? { number: snd.value.trim() } : { messagingServiceSid: snd.value.trim() }) }), async () => { setSenderFor(null); await loadAccounts(); })}>Verify &amp; add</button>
+          </div>
+        </Modal>
+      )}
+      {evidence && (
+        <Modal title={`Record approval - ${evidence.reg.type}`} onClose={() => setEvidence(null)}>
+          <p className="text-xs text-slate-400">Enter the reference to the real approval (Twilio console ticket/SID and date, or the carrier notice). This is kept in the audit trail; nothing is approved without it.</p>
+          <textarea className={input} rows={3} value={evidenceText} onChange={(e) => setEvidenceText(e.target.value)} placeholder="e.g. Twilio brand registration BN… approved 2026-11-20, ticket #12345" />
+          <div className="flex justify-end gap-2">
+            <button className={btnGhost} onClick={() => setEvidence(null)}>Cancel</button>
+            <button className={btnPrimary} disabled={evidenceText.trim().length < 5} onClick={() => act("Approval recorded", () => manage("POST", `/admin/sms/compliance/${evidence.reg.id}/status`, { status: evidence.to, evidenceNote: evidenceText.trim() }), async () => { setEvidence(null); await loadCompliance(); })}>Record approval</button>
           </div>
         </Modal>
       )}

@@ -83,3 +83,13 @@ export function vaultDecrypt(payload: string, context: string): string {
 }
 
 export const credentialContext = (accountId: string, field: "authToken" | "apiKeySecret") => `twilio:${accountId}:${field}`;
+
+/**
+ * A 32-byte subkey derived from the CURRENT vault key (HKDF-SHA256). Only for development
+ * fallbacks: anything stored long-term (recipient/consent hashes) must use DCG_HMAC_KEY instead,
+ * because a derived key changes whenever the vault key is rotated.
+ */
+export function vaultDerive(info: string): Buffer {
+  const key = keyFor(currentKeyVersion());
+  return Buffer.from(crypto.hkdfSync("sha256", key, Buffer.alloc(0), Buffer.from(`datebuk-dcg:${info}`), 32));
+}

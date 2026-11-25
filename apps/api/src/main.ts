@@ -39,7 +39,11 @@ async function bootstrap() {
     app.use(cookieParser());
 
     const webUrl = process.env.WEB_URL || "http://localhost:3000";
-    app.enableCors({ origin: webUrl, credentials: true });
+    // The admin/staff portal is served from its own origin (apps/web `dev:portal` / `start:portal`, port 3010 by default)
+    // and its pages call this API from the browser, so that exact origin must be allowed too. Exact origins only -
+    // never a wildcard and never a reflected Origin header, since credentials are enabled.
+    const origins = [webUrl, process.env.ADMIN_PORTAL_URL].filter((o): o is string => !!o && o.trim() !== "").map((o) => o.trim().replace(/\/$/, ""));
+    app.enableCors({ origin: origins, credentials: true });
 
     // request id + structured logs
     app.use(new RequestIdMiddleware().use);

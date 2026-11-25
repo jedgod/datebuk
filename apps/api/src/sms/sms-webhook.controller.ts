@@ -6,6 +6,8 @@ import { DcgEnabledGuard } from "./dcg-enabled.guard";
 import { dcg } from "./dcg-config";
 import { START_WORDS, STOP_WORDS, validateTwilioSignature } from "./twilio-signature";
 import { applyProviderStatus } from "./sms-state";
+import { ConsentService } from "./consent.service";
+import { smsMetrics } from "./sms-metrics";
 
 const E164 = /^\+[1-9]\d{7,14}$/;
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -29,7 +31,7 @@ const TWIML = "<Response/>";
 @Controller("sms/webhooks")
 @UseGuards(DcgEnabledGuard)
 export class SmsWebhookController {
-  constructor(private prisma: PrismaService, private accounts: SmsAccountsService) {}
+  constructor(private prisma: PrismaService, private accounts: SmsAccountsService, private consent: ConsentService) {}
 
   /** The URL Twilio actually called, rebuilt from our configured public origin (not from Host headers). */
   private publicUrl(req: any): string {
@@ -52,8 +54,13 @@ export class SmsWebhookController {
     const body = (req.body ?? {}) as Record<string, string>;
     const auth = await this.authFor(body.AccountSid);
     // Unknown/revoked account, or no Auth Token on file (API-key-only accounts can't be verified).
-    if (!auth) throw new ForbiddenException("invalid_signature");
+    if (!auth) {
+      smsMetrics.inc("webhook_rejected");
+      throw new ForbiddenException("invalid_signature");
+    }
+    // Mandatory in production (dcg.signatureRequired() is always true there). Counted, never logged with payloads.
     if (dcg.signatureRequired() && !validateTwilioSignature(auth.token, signature, this.publicUrl(req), body)) {
+      smsMetrics.inc("webhook_rejected");
       throw new ForbiddenException("invalid_signature");
     }
     return { body, accountId: auth.accountId };
@@ -70,10 +77,12 @@ export class SmsWebhookController {
       const from = body.From;
       const text = (body.Body ?? "").trim();
       if (typeof from === "string" && E164.test(from)) {
+        // Both are idempotent. STOP withdraws every consent and suppresses the number. START only lifts
+        // that block: it grants no consent (never marketing). Each leaves an immutable history record.
         if (body.OptOutType === "STOP" || STOP_WORDS.test(text)) {
-          await this.prisma.smsSuppression.upsert({ where: { phone: from }, update: {}, create: { phone: from } });
+          await this.consent.onStop(from);
         } else if (body.OptOutType === "START" || START_WORDS.test(text)) {
-          await this.prisma.smsSuppression.deleteMany({ where: { phone: from } });
+          await this.consent.onStart(from);
         }
       }
       return TWIML;
@@ -92,6 +101,7 @@ export class SmsWebhookController {
 
     // A callback may only affect a message sent through the account that signed it.
     if ((message.accountId ?? null) !== (accountId ?? null)) {
+      smsMetrics.inc("webhook_rejected");
       throw new ForbiddenException("account_mismatch");
     }
     // ...and if we already know its provider id, it must be the same message.

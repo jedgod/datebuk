@@ -89,12 +89,11 @@ ALTER TABLE "SmsMessage" DROP COLUMN "ref", DROP COLUMN "toEncrypted", DROP COLU
 DELETE FROM "_prisma_migrations" WHERE migration_name = '20261124180000_sms_outbox_and_webhook_events';
 ```
 
-## Release gates - NOT passed
-- **Live Twilio: still untested.** No real request has been made. Account registration, sender ownership, real sends, real status/inbound
-  callbacks, and the Twilio-side idempotency header are unverified. Needs approved credentials and authorized test recipients.
-- **Superadmin browser tests: not done.** The API access matrix and a real MFA superadmin HTTP run pass; the Communications Center UI has
-  not been exercised in a browser.
-- Redis coordination: deliberately not added (PostgreSQL advisory locks + row leases do the coordinating).
-- Not built: OTP workflows and recovery protection, anti-fraud rules, per-recipient consent records, A2P 10DLC / toll-free verification
-  evidence, a scheduled reconciliation job against Twilio's message list (today: callbacks + admin), cost reporting from Twilio prices.
-- Not done: monitoring/alerting, backup/restore drill, load test, independent security review, migration rollback rehearsal on a copy.
+## Release gates and evidence (V12.1-V15.0)
+Status: **NO-GO**. Start with:
+- [RELEASE-GATES.md](RELEASE-GATES.md) - every gate, what proves it, what is external, and the live-certification procedure
+- [SECURITY-FINDINGS.md](SECURITY-FINDINGS.md) - dependency audit (195 advisories, 8 critical), authorization, crypto, webhook, OTP and privacy review
+- [DR-DRILL-2026-11-25.md](DR-DRILL-2026-11-25.md) - backup, isolated restore, vault-key recovery, rollback, RTO/RPO
+- [API.md](API.md) - endpoints and access rules; `screenshots/` - real-browser evidence (31/31 checks)
+- Rollback scripts: `apps/api/prisma/rollback/*.down.sql`; tests: `pnpm --filter api test` (unit in parallel, then integration serially).
+  **The integration suites share the development database: run them with the dev API stopped** (its worker also sweeps the outbox).

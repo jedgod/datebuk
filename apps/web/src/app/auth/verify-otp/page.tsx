@@ -49,6 +49,8 @@ export default function VerifyOTP() {
 
       // Set auth token and redirect
       setTokens(data.accessToken, data.refreshToken, data.userId || userId);
+      // Staff/admin pages are gated by role cookies the SERVER sets from the API's own view of this token.
+      await fetch('/api/auth/establish-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accessToken: data.accessToken }) });
 
       // Check if password needs to be changed
       if (data.mustChangePassword) {

@@ -67,7 +67,7 @@ describe("PermissionsGuard / @RequirePermissions pairing", () => {
     [MetricsController, ["metricsEndpoint"]],
     [SecurityAlertController, ["list", "stats", "acknowledge", "resolve"]],
     [FeatureAdminController, ["overview", "disable", "enable"]],
-    [SmsAdminController, ["list", "history", "analytics", "audit", "webhookConfig", "register", "validate", "activate", "suspend", "revoke", "rotate", "spending", "migrate", "reconcile", "registerSender", "disableSender"]],
+    [SmsAdminController, ["list", "history", "analytics", "audit", "webhookConfig", "register", "validate", "activate", "suspend", "revoke", "rotate", "spending", "migrate", "reconcile", "registerSender", "disableSender", "health", "alerts", "riskEvents", "reviewRisk", "consentLookup", "complianceList", "needsReview", "complianceCreate", "complianceStatus", "emergencyStop", "runReconcile", "erase"]],
   ];
 
   for (const [controllerClass, methodNames] of controllersWithMethods) {

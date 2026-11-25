@@ -7,6 +7,9 @@ import { AuditService } from "../common/audit/audit.service";
 import { PgBossService } from "../common/pgboss/pgboss.service";
 import { vaultConfigured, vaultDecrypt, vaultEncrypt } from "../common/security/credential-vault";
 import { SmsAccountsService } from "./sms-accounts.service";
+import { SmsControlService } from "./sms-control.service";
+import { ComplianceService } from "./compliance.service";
+import { ConsentService } from "./consent.service";
 import { dcg } from "./dcg-config";
 import { countSegments } from "./sms-segments";
 import { basicAuth, type TwilioRestCreds } from "./twilio-api";
@@ -21,6 +24,7 @@ export type SmsDelivery = "queued" | "logged";
 export type Sender = {
   source: "db" | "env";
   accountId: string | null;
+  senderId: string | null;
   creds: TwilioRestCreds;
   from?: string;
   messagingServiceSid?: string;
@@ -83,6 +87,10 @@ export class SmsOutboxService {
     private accounts: SmsAccountsService,
     private audit: AuditService,
     private boss: PgBossService,
+    // Optional so the outbox can be constructed in isolation (tests); Nest always injects them.
+    private control?: SmsControlService,
+    private compliance?: ComplianceService,
+    private consent?: ConsentService,
   ) {}
 
   registerPurposeGuard(purpose: string, guard: PurposeGuard) {
@@ -103,7 +111,7 @@ export class SmsOutboxService {
     const creds: TwilioRestCreds | null =
       apiKeySid && apiKeySecret ? { accountSid, apiKeySid, secret: apiKeySecret } : authToken ? { accountSid, secret: authToken } : null;
     if (!creds) return null;
-    return { source: "env", accountId: null, creds, from: from || undefined, messagingServiceSid: messagingServiceSid || undefined, dailyLimit: null, monthlyLimit: null, allowedPrefixes: ["+1"] };
+    return { source: "env", accountId: null, senderId: null, creds, from: from || undefined, messagingServiceSid: messagingServiceSid || undefined, dailyLimit: null, monthlyLimit: null, allowedPrefixes: ["+1"] };
   }
 
   private async fromDb(): Promise<Sender | null> {
@@ -118,6 +126,7 @@ export class SmsOutboxService {
     return {
       source: "db",
       accountId: account.id,
+      senderId: sender.id,
       creds,
       from: sender.senderNumber ?? undefined,
       messagingServiceSid: sender.messagingServiceSid ?? undefined,
@@ -146,6 +155,11 @@ export class SmsOutboxService {
       throw new ServiceUnavailableException("This number has opted out of text messages. Reply START to opt back in.");
     }
 
+    if (await this.control?.isStopped()) throw new ServiceUnavailableException("SMS is temporarily unavailable.");
+    if (this.consent && !(await this.consent.hasConsent(toE164, opts.purpose ?? "transactional"))) {
+      throw new ServiceUnavailableException("This number hasn't agreed to receive these messages.");
+    }
+
     const sender = await this.resolveSender();
     const prefixes = sender?.allowedPrefixes ?? ["+1"];
     if (!prefixes.some((p) => toE164.startsWith(p))) {
@@ -156,10 +170,17 @@ export class SmsOutboxService {
       if (process.env.NODE_ENV === "production") {
         throw new ServiceUnavailableException(!dcg.liveSms() ? "SMS is disabled" : "SMS is not configured");
       }
-      this.log.warn(`[dev] SMS not queued (${!dcg.liveSms() ? "DCG_LIVE_SMS_ENABLED is off" : "no active provider account"}) to ***${toE164.slice(-4)}. Body: ${body}`);
+      // Message bodies carry OTPs and verification links: they are NEVER logged by default. A developer can opt in
+      // locally with DCG_DEV_LOG_BODIES=true; that switch is ignored in production.
+      const reason = !dcg.liveSms() ? "DCG_LIVE_SMS_ENABLED is off" : "no active provider account";
+      const optIn = process.env.DCG_DEV_LOG_BODIES === "true" && process.env.NODE_ENV !== "production";
+      this.log.warn(`[dev] SMS not queued (${reason}) to ***${toE164.slice(-4)}, purpose=${opts.purpose ?? "transactional"}, ${body.length} chars${optIn ? `. Body: ${body}` : ""}`);
       return { id: null, delivery: "logged" };
     }
     if (!vaultConfigured()) throw new ServiceUnavailableException("SMS credential vault is not configured");
+    if (this.compliance && !(await this.compliance.isSenderApproved(sender.accountId, { id: sender.senderId, number: sender.from, messagingService: !!sender.messagingServiceSid }))) {
+      throw new ServiceUnavailableException("SMS isn't available: the sender has no approved carrier registration.");
+    }
 
     const { segments } = countSegments(body);
     const id = randomUUID();
@@ -209,7 +230,8 @@ export class SmsOutboxService {
         });
         return { id, replay: false };
       },
-      { timeout: 15_000 },
+      // Callers for one account queue on its budget lock; let them wait for a connection/turn instead of failing at Prisma's 2s default.
+      { timeout: 15_000, maxWait: 10_000 },
     );
 
     // Low-latency wake-up. If this fails the sweeper still dispatches the message.
@@ -231,6 +253,25 @@ export class SmsOutboxService {
        WHERE "id" = ${id} AND "state" = 'queued' AND "nextAttemptAt" <= (now() AT TIME ZONE 'UTC')
    RETURNING "id","accountId","userId","purpose","ref","segments","state","toEncrypted","bodyEncrypted","attempts","expiresAt"`;
     return rows[0] ?? null;
+  }
+
+  /**
+   * Atomically claim up to `limit` due messages for THIS worker. `FOR UPDATE SKIP LOCKED` means concurrent
+   * workers never contend for - or double-claim - the same rows: each simply takes the next unclaimed ones.
+   */
+  async claimDue(limit: number): Promise<Row[]> {
+    return this.prisma.$queryRaw<Row[]>`
+      UPDATE "SmsMessage"
+         SET "state" = 'dispatching', "claimedBy" = ${this.workerId},
+             "leaseUntil" = (now() AT TIME ZONE 'UTC') + ${LEASE_SECONDS}::int * interval '1 second',
+             "updatedAt" = (now() AT TIME ZONE 'UTC')
+       WHERE "id" IN (
+         SELECT "id" FROM "SmsMessage"
+          WHERE "state" = 'queued' AND "nextAttemptAt" <= (now() AT TIME ZONE 'UTC')
+          ORDER BY "nextAttemptAt" ASC
+          LIMIT ${limit}
+            FOR UPDATE SKIP LOCKED)
+   RETURNING "id","accountId","userId","purpose","ref","segments","state","toEncrypted","bodyEncrypted","attempts","expiresAt"`;
   }
 
   private wipe = { toEncrypted: null, bodyEncrypted: null, leaseUntil: null, claimedBy: null } as const;
@@ -261,6 +302,10 @@ export class SmsOutboxService {
   async dispatchById(id: string): Promise<string> {
     const m = await this.claim(id);
     if (!m) return "skipped";
+    return this.processClaimed(m);
+  }
+
+  private async processClaimed(m: Row): Promise<string> {
     try {
       return await this.process(m);
     } catch (e) {
@@ -299,9 +344,15 @@ export class SmsOutboxService {
       if (reason) return cancel(reason);
     }
 
+    if (this.consent && !(await this.consent.hasConsent(to, m.purpose))) return cancel("no_consent");
+
     if (!dcg.liveSms()) {
       await this.requeue(m, 60, "sending paused (DCG_LIVE_SMS_ENABLED is off)", false);
       return "requeued:paused";
+    }
+    if (await this.control?.isStopped()) {
+      await this.requeue(m, 60, "emergency stop engaged", false);
+      return "requeued:emergency_stop";
     }
 
     const sender = await this.resolveSender();
@@ -319,6 +370,9 @@ export class SmsOutboxService {
       return "requeued:no_sender";
     }
     if (!sender.allowedPrefixes.some((p) => to.startsWith(p))) return cancel("destination_not_allowed");
+    if (this.compliance && !(await this.compliance.isSenderApproved(sender.accountId, { id: sender.senderId, number: sender.from, messagingService: !!sender.messagingServiceSid }))) {
+      return cancel("registration_not_approved");
+    }
 
     // ---- the one place Twilio is called ----------------------------------------------
     const attempt = m.attempts + 1;
@@ -407,15 +461,14 @@ export class SmsOutboxService {
       await this.audit.log({ action: "SMS_LEASE_EXPIRED", actorUserId: null, metadata: { count: leases.count } });
     }
 
-    const due = await this.prisma.smsMessage.findMany({
-      where: { state: "queued", nextAttemptAt: { lte: new Date() } },
-      orderBy: { nextAttemptAt: "asc" },
-      take: limit,
-      select: { id: true },
-    });
+    // Claim a batch atomically (no worker ever claims another's rows), then work through it in small parallel
+    // chunks so no claimed row can wait long enough for its own lease to expire (10s provider timeout x chunks < 60s lease).
+    const claimed = await this.claimDue(limit);
     let dispatched = 0;
-    for (const { id } of due) {
-      if ((await this.dispatchById(id)) !== "skipped") dispatched++;
+    const CHUNK = 10;
+    for (let i = 0; i < claimed.length; i += CHUNK) {
+      const results = await Promise.all(claimed.slice(i, i + CHUNK).map((m) => this.processClaimed(m)));
+      dispatched += results.length;
     }
     return { leasesExpired: leases.count, expired: expired.count, dispatched };
   }

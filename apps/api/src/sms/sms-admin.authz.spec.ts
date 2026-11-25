@@ -71,8 +71,8 @@ async function attempt(method: keyof SmsAdminController, who: Who | null, header
 const stepUp = (userId: string, opts: { expiresIn?: number | string; purpose?: string; temp?: boolean } = {}) =>
   jwt.sign({ sub: userId, temp: opts.temp ?? true, purpose: opts.purpose ?? "step-up" }, { expiresIn: (opts.expiresIn ?? 300) as any });
 
-const READ = ["list", "history", "analytics", "audit", "webhookConfig"] as const;
-const MANAGE_STEPUP = ["register", "activate", "suspend", "revoke", "rotate", "spending", "migrate", "reconcile", "registerSender", "disableSender"] as const;
+const READ = ["list", "history", "analytics", "audit", "webhookConfig", "health", "alerts", "riskEvents", "reviewRisk", "consentLookup", "complianceList", "needsReview"] as const;
+const MANAGE_STEPUP = ["register", "activate", "suspend", "revoke", "rotate", "spending", "migrate", "reconcile", "registerSender", "disableSender", "complianceCreate", "complianceStatus", "emergencyStop", "runReconcile", "erase"] as const;
 
 const ENV = { ...process.env };
 beforeEach(() => {

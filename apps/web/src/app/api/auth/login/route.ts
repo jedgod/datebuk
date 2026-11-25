@@ -46,6 +46,15 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await backendRes.json();
+
+    // Staff and admins must use MFA: the API answers with a temporary token instead of a session. Pass that on so
+    // the page can send the user to the code (or enrolment) screen; the session cookies are set when it completes.
+    if (data?.requiresOtp && data?.tempToken && data?.userId) {
+      return NextResponse.json({ success: true, requiresOtp: true, tempToken: data.tempToken, userId: data.userId, redirectUrl: nextUrl });
+    }
+    if (data?.mustSetupMfa && data?.tempToken && data?.userId) {
+      return NextResponse.json({ success: true, mustSetupMfa: true, tempToken: data.tempToken, userId: data.userId, redirectUrl: nextUrl });
+    }
     if (!data.accessToken) {
       return NextResponse.json({ error: "Login service returned no access token" }, { status: 502 });
     }

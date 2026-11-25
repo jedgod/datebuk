@@ -1,0 +1,164 @@
+{
+  "at": "2026-11-25T03:26:01.075Z",
+  "results": [
+    {
+      "name": "unauthenticated visitor is sent to the admin login",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "an ordinary customer cannot open the admin Communications Center",
+      "ok": true,
+      "detail": "/access-denied?reason=admin"
+    },
+    {
+      "name": "...and the API independently refuses the customer (403)",
+      "ok": true,
+      "detail": "status 403"
+    },
+    {
+      "name": "superadmin signs in through the real login + OTP screen and lands on the Communications Center",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "role cookies are server-set and httpOnly (page scripts cannot forge them)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "provider accounts load from the real API",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin sees management controls",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no credential material is rendered anywhere on the page",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "a management action asks for MFA step-up first",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "a wrong step-up code is rejected in the UI",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "with a correct code the request reaches provider validation, and fake credentials are refused",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "spending controls save and show on the account (within the cached step-up window)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "...and are persisted in the database",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "a sender the account doesn't own is refused",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "an expired step-up token is refused by the server and the UI re-prompts for MFA",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "after re-confirming, the action completes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "health, queue and spending panels load from the real API",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "emergency stop engages from the dashboard and is shown prominently",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "...and is recorded in the database",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "it can be released",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "approving a registration asks for an evidence reference",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the Record approval button is disabled without evidence",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "approval is stored with its evidence note and the approver",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the audit trail shows step-up, spending, emergency-stop and compliance actions",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "staff sign in through real MFA and reach Communications Operations",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "staff can read provider accounts",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "staff see NO management controls",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "staff cannot see the emergency-stop control",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "consent lookup shows masked history only: the full number never appears in the rendered page",
+      "ok": true,
+      "detail": "full number in page text: false"
+    },
+    {
+      "name": "the API refuses staff management calls (403) even from their own signed-in browser, but allows reads",
+      "ok": true,
+      "detail": "{\"stop\":403,\"register\":403,\"read\":200}"
+    },
+    {
+      "name": "staff cannot open the admin page",
+      "ok": true,
+      "detail": "http://localhost:3010/access-denied?reason=admin"
+    }
+  ],
+  "consoleErrors": [
+    "[RevenueCat Hook] Error: Failed to fetch"
+  ],
+  "note": "Simulated provider: fake Twilio credentials only; no SMS sent; not live certification."
+}
