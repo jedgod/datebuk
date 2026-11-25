@@ -142,7 +142,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="how" className="relative z-10 border-b border-white/40 bg-white/65 py-12 backdrop-blur-[2px]">
+      <section id="how" className="scroll-mt-16 relative z-10 border-b border-white/40 bg-white/65 py-12 backdrop-blur-[2px]">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <h2 className="text-3xl font-extrabold text-gray-900">How it works</h2>
           <div className="mt-6 grid gap-5 md:grid-cols-3">
@@ -160,7 +160,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="safety" className="relative z-10 border-y border-slate-300/60 bg-slate-200/75 py-12 backdrop-blur-[2px]">
+      <section id="safety" className="scroll-mt-16 relative z-10 border-y border-slate-300/60 bg-slate-200/75 py-12 backdrop-blur-[2px]">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <h2 className="text-3xl font-extrabold text-gray-900">Safety first</h2>
           <p className="mt-3 text-lg text-gray-600">
@@ -181,7 +181,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="stories" className="relative z-10 bg-white/65 py-12 backdrop-blur-[2px]">
+      <section id="stories" className="scroll-mt-16 relative z-10 bg-white/65 py-12 backdrop-blur-[2px]">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <h2 className="text-3xl font-extrabold text-gray-900">Success stories</h2>
           <div className="mt-6 grid gap-5 md:grid-cols-3">

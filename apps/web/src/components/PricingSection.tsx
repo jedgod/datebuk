@@ -107,7 +107,7 @@ export function PricingSection() {
 
   if (loading) {
     return (
-      <section id="pricing" className="relative z-20 bg-slate-200/75 py-8 backdrop-blur-[2px]">
+      <section id="pricing" className="scroll-mt-16 relative z-20 bg-slate-200/75 py-8 backdrop-blur-[2px]">
         <div className="mx-auto max-w-5xl px-4">
           <div className="text-center">Loading...</div>
         </div>
@@ -116,7 +116,7 @@ export function PricingSection() {
   }
 
   return (
-    <section id="pricing" className="relative z-20 bg-slate-200/75 py-8 backdrop-blur-[2px]">
+    <section id="pricing" className="scroll-mt-16 relative z-20 bg-slate-200/75 py-8 backdrop-blur-[2px]">
       <div className="mx-auto max-w-5xl px-4">
         <div className="text-center mb-6">
           <h2 className="text-2xl font-extrabold text-gray-900">Pricing</h2>
