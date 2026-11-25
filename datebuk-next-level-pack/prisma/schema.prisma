@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  fullName     String
+  role         Role     @default(USER)
+  trustScore   Int      @default(40)
+  verified     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  profile      Profile?
+  tickets      Ticket[]
+  reportsMade  Report[] @relation("reportsMade")
+  reportsAbout Report[] @relation("reportsAbout")
+}
+
+model Profile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id])
+  age               Int?
+  city              String?
+  country           String?
+  relationshipGoal  String?
+  interests         String[]
+  bio               String?
+  compatibilityTags String[]
+  createdAt         DateTime @default(now())
+}
+
+model Ticket {
+  id        String       @id @default(cuid())
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id])
+  name      String
+  email     String
+  issueType String
+  message   String
+  status    TicketStatus @default(OPEN)
+  priority  Priority     @default(NORMAL)
+  createdAt DateTime     @default(now())
+}
+
+model Report {
+  id            String       @id @default(cuid())
+  reporterId    String
+  reportedUserId String
+  reporter      User         @relation("reportsMade", fields: [reporterId], references: [id])
+  reportedUser  User         @relation("reportsAbout", fields: [reportedUserId], references: [id])
+  reason        String
+  evidenceUrl   String?
+  status        ReportStatus @default(PENDING)
+  createdAt     DateTime     @default(now())
+}
+
+enum Role { USER ADMIN MODERATOR }
+enum TicketStatus { OPEN IN_PROGRESS RESOLVED CLOSED }
+enum Priority { LOW NORMAL HIGH URGENT }
+enum ReportStatus { PENDING REVIEWING ACTIONED DISMISSED }

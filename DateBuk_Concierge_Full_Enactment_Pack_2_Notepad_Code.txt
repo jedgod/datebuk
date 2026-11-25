@@ -1,0 +1,3701 @@
+
+DATEBUK CONCIERGE FULL ENACTMENT PACK 2
+======================================
+
+PURPOSE
+-------
+This pack completes the operational wiring required to move the concierge
+module from "feature code" to a fully enacted production workflow.
+
+It builds on:
+DateBuk_Concierge_Premium_Services_Fullstack_Notepad_Code.txt
+
+THIS PACK ADDS
+--------------
+1. Auth.js / NextAuth role-aware authentication.
+2. Redis-backed rate limiting and distributed locking.
+3. BullMQ background jobs for outreach, notifications, expiry, refunds,
+   staff assignment, and analytics.
+4. Email delivery with Resend-compatible provider.
+5. Optional SMS push hook.
+6. Feature flags and operational settings.
+7. Staff workload assignment.
+8. Staff SLA and escalation workflow.
+9. Request moderation and prohibited-content screening.
+10. Recipient privacy controls.
+11. Refund and payment-dispute workflow.
+12. Stripe product/price synchronization.
+13. Admin operational controls.
+14. Audit export.
+15. Cron endpoints.
+16. Health checks and observability.
+17. Unit and integration tests.
+18. Deployment checklist.
+19. Fixes for earlier route wiring.
+20. Fully wired member, staff, and admin pages.
+
+STACK
+-----
+- Next.js App Router
+- TypeScript
+- PostgreSQL
+- Prisma
+- Auth.js / NextAuth
+- Stripe
+- Redis
+- BullMQ
+- Resend
+- Zod
+- Vitest
+- Playwright
+
+====================================================================
+PROJECT ADDITIONS
+====================================================================
+
+datebuk-concierge/
+├─ app/
+│  ├─ api/
+│  │  ├─ auth/[...nextauth]/route.ts
+│  │  ├─ concierge/
+│  │  │  ├─ settings/route.ts
+│  │  │  ├─ requests/[id]/cancel/route.ts
+│  │  │  ├─ requests/[id]/appeal/route.ts
+│  │  │  └─ requests/[id]/messages/route.ts
+│  │  ├─ admin/
+│  │  │  ├─ concierge-settings/route.ts
+│  │  │  ├─ feature-flags/route.ts
+│  │  │  ├─ audit-export/route.ts
+│  │  │  ├─ stripe-sync/route.ts
+│  │  │  └─ staff-workload/route.ts
+│  │  ├─ cron/
+│  │  │  ├─ assign-staff/route.ts
+│  │  │  ├─ expire-concierge/route.ts
+│  │  │  ├─ retry-notifications/route.ts
+│  │  │  └─ reconcile-payments/route.ts
+│  │  ├─ health/route.ts
+│  │  └─ webhooks/
+│  │     └─ resend/route.ts
+│  ├─ settings/concierge/page.tsx
+│  ├─ concierge/[id]/page.tsx
+│  ├─ staff/concierge/[id]/page.tsx
+│  └─ admin/concierge/settings/page.tsx
+├─ components/
+│  ├─ concierge/
+│  │  ├─ ConciergeSettingsForm.tsx
+│  │  ├─ ConciergeTimeline.tsx
+│  │  ├─ ConciergeMessageComposer.tsx
+│  │  ├─ StaffAssignmentPanel.tsx
+│  │  └─ StaffDecisionPanel.tsx
+│  └─ admin/
+│     ├─ ConciergeOperationsForm.tsx
+│     └─ FeatureFlagForm.tsx
+├─ lib/
+│  ├─ redis.ts
+│  ├─ queue.ts
+│  ├─ distributed-lock.ts
+│  ├─ notification-provider.ts
+│  ├─ moderation.ts
+│  ├─ feature-flags.ts
+│  ├─ operational-settings.ts
+│  ├─ staff-assignment.ts
+│  ├─ stripe-sync.ts
+│  ├─ request-context.ts
+│  ├─ errors.ts
+│  └─ observability.ts
+├─ worker/
+│  ├─ index.ts
+│  ├─ concierge.worker.ts
+│  ├─ notification.worker.ts
+│  ├─ payment.worker.ts
+│  └─ analytics.worker.ts
+├─ tests/
+│  ├─ unit/
+│  │  ├─ moderation.test.ts
+│  │  ├─ concierge-policy.test.ts
+│  │  └─ staff-assignment.test.ts
+│  ├─ integration/
+│  │  ├─ concierge-request.test.ts
+│  │  ├─ stripe-webhook.test.ts
+│  │  └─ recipient-response.test.ts
+│  └─ e2e/
+│     └─ concierge.spec.ts
+├─ auth.ts
+├─ vitest.config.ts
+├─ playwright.config.ts
+└─ docker-compose.local.yml
+
+====================================================================
+PACKAGE UPDATES
+====================================================================
+
+Replace or merge package.json dependencies with:
+
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "worker": "tsx worker/index.ts",
+    "worker:dev": "tsx watch worker/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "stripe:sync": "tsx scripts/sync-stripe.ts"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "^2.9.1",
+    "@prisma/client": "^6.11.1",
+    "bcryptjs": "^3.0.2",
+    "bullmq": "^5.56.4",
+    "ioredis": "^5.6.1",
+    "next": "^15.3.4",
+    "next-auth": "^5.0.0-beta.28",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "resend": "^4.6.0",
+    "stripe": "^18.2.1",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.2",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.15.32",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "prisma": "^6.11.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
+
+====================================================================
+ENVIRONMENT ADDITIONS
+====================================================================
+
+Add these values to .env.example:
+
+REDIS_URL="redis://localhost:6379"
+
+RESEND_API_KEY="re_replace"
+EMAIL_FROM="DateBuk Concierge <concierge@yourdomain.com>"
+EMAIL_REPLY_TO="support@yourdomain.com"
+
+CONCIERGE_FEATURE_ENABLED="true"
+CONCIERGE_STAFF_SLA_HOURS="24"
+CONCIERGE_OUTREACH_SLA_HOURS="48"
+CONCIERGE_MAX_STAFF_ACTIVE_CASES="25"
+CONCIERGE_AUTO_ASSIGN_ENABLED="true"
+CONCIERGE_ALLOW_CUSTOM_STAFF_MESSAGE="false"
+CONCIERGE_REQUIRE_RECIPIENT_PROFILE_ACTIVE="true"
+CONCIERGE_REQUIRE_PRIOR_MESSAGE="true"
+CONCIERGE_MIN_PRIOR_MESSAGES="1"
+CONCIERGE_RECIPIENT_COOLDOWN_DAYS="30"
+CONCIERGE_REQUEST_EXPIRY_DAYS="7"
+CONCIERGE_APPEAL_WINDOW_HOURS="72"
+
+STRIPE_CONCIERGE_PRODUCT_ID=""
+STRIPE_CONCIERGE_PRICE_ID=""
+
+CRON_SECRET="replace-with-a-long-random-secret"
+INTERNAL_WORKER_SECRET="replace-with-another-long-random-secret"
+
+SENTRY_DSN=""
+APP_ENV="development"
+
+====================================================================
+PRISMA SCHEMA ADDITIONS
+====================================================================
+
+Add these enums and models to prisma/schema.prisma.
+Merge relations into the existing User, ConciergeRequest, ServiceCatalog,
+Payment, and AuditLog models.
+
+enum FeatureFlagKey {
+  CONCIERGE_ENABLED
+  CONCIERGE_PURCHASE_ENABLED
+  CONCIERGE_REQUEST_ENABLED
+  CONCIERGE_STAFF_OUTREACH_ENABLED
+  PROFILE_REVIEW_ENABLED
+  PROFILE_OPTIMIZATION_ENABLED
+  PHOTO_REVIEW_ENABLED
+  BACKGROUND_CHECK_ENABLED
+  DATE_PLANNING_ENABLED
+  RELATIONSHIP_COACHING_ENABLED
+  PRIORITY_SUPPORT_ENABLED
+}
+
+enum NotificationDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  BOUNCED
+  COMPLAINED
+}
+
+enum StaffAssignmentStatus {
+  ASSIGNED
+  ACCEPTED
+  REASSIGNED
+  RELEASED
+  COMPLETED
+}
+
+enum AppealStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CLOSED
+}
+
+model OperationalSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  valueJson   Json
+  description String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model FeatureFlag {
+  id          String         @id @default(cuid())
+  key         FeatureFlagKey @unique
+  enabled     Boolean        @default(false)
+  description String?
+  updatedById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model NotificationDelivery {
+  id                  String                     @id @default(cuid())
+  notificationId      String?
+  userId              String
+  channel             String
+  destination         String
+  provider            String
+  providerMessageId   String?
+  status              NotificationDeliveryStatus @default(QUEUED)
+  attemptCount        Int                        @default(0)
+  lastError           String?
+  nextAttemptAt       DateTime?
+  sentAt              DateTime?
+  deliveredAt         DateTime?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+
+  notification Notification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([userId, createdAt])
+}
+
+model StaffAssignment {
+  id                 String                @id @default(cuid())
+  conciergeRequestId String                @unique
+  staffId            String
+  assignedById       String?
+  status             StaffAssignmentStatus @default(ASSIGNED)
+  assignedAt         DateTime              @default(now())
+  acceptedAt         DateTime?
+  releasedAt         DateTime?
+  completedAt        DateTime?
+  notes              String?
+
+  conciergeRequest ConciergeRequest @relation(fields: [conciergeRequestId], references: [id], onDelete: Cascade)
+  staff            User             @relation("ConciergeAssignedStaff", fields: [staffId], references: [id], onDelete: Cascade)
+  assignedBy       User?            @relation("ConciergeAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([staffId, status])
+}
+
+model ConciergeAppeal {
+  id                 String       @id @default(cuid())
+  conciergeRequestId String
+  requesterId        String
+  status             AppealStatus @default(PENDING)
+  reason             String
+  decisionNotes      String?
+  reviewedById       String?
+  reviewedAt         DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  conciergeRequest ConciergeRequest @relation(fields: [conciergeRequestId], references: [id], onDelete: Cascade)
+  requester        User             @relation("ConciergeAppealRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  reviewedBy       User?            @relation("ConciergeAppealReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+}
+
+model ModerationDecision {
+  id                 String   @id @default(cuid())
+  conciergeRequestId String
+  decision           String
+  score               Int
+  matchedRules        Json
+  normalizedText      String
+  reviewedById        String?
+  reviewedAt          DateTime?
+  createdAt           DateTime @default(now())
+
+  conciergeRequest ConciergeRequest @relation(fields: [conciergeRequestId], references: [id], onDelete: Cascade)
+  reviewedBy       User?            @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([decision, createdAt])
+}
+
+model StripeCatalogLink {
+  id               String      @id @default(cuid())
+  serviceCatalogId String      @unique
+  stripeProductId  String
+  stripePriceId    String
+  active           Boolean     @default(true)
+  syncedAt         DateTime    @default(now())
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  service ServiceCatalog @relation(fields: [serviceCatalogId], references: [id], onDelete: Cascade)
+}
+
+Add these relations to User:
+
+operationalSettingsUpdated OperationalSetting[]
+featureFlagsUpdated       FeatureFlag[]
+notificationDeliveries    NotificationDelivery[]
+conciergeAssignedCases    StaffAssignment[] @relation("ConciergeAssignedStaff")
+conciergeAssignmentsMade  StaffAssignment[] @relation("ConciergeAssignedBy")
+conciergeAppealsMade      ConciergeAppeal[] @relation("ConciergeAppealRequester")
+conciergeAppealsReviewed  ConciergeAppeal[] @relation("ConciergeAppealReviewer")
+moderationReviews         ModerationDecision[]
+
+Add these relations to ConciergeRequest:
+
+assignment          StaffAssignment?
+appeals             ConciergeAppeal[]
+moderationDecisions ModerationDecision[]
+
+Add this relation to Notification:
+
+deliveries NotificationDelivery[]
+
+Add this relation to ServiceCatalog:
+
+stripeLink StripeCatalogLink?
+
+====================================================================
+FILE: auth.ts
+====================================================================
+
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
+import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import { compare } from "bcryptjs";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+
+const credentialsSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  adapter: PrismaAdapter(prisma),
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
+  },
+  providers: [
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      authorize: async (rawCredentials) => {
+        const credentials = credentialsSchema.parse(rawCredentials);
+
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email.toLowerCase() },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            image: true,
+            passwordHash: true,
+            role: true,
+            membershipTier: true,
+            isSuspended: true,
+          },
+        });
+
+        if (!user || !user.passwordHash || user.isSuspended) {
+          return null;
+        }
+
+        const valid = await compare(credentials.password, user.passwordHash);
+        if (!valid) return null;
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          role: user.role,
+          membershipTier: user.membershipTier,
+        };
+      },
+    }),
+
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [
+          Google({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          }),
+        ]
+      : []),
+
+    ...(process.env.MICROSOFT_ENTRA_ID_CLIENT_ID &&
+    process.env.MICROSOFT_ENTRA_ID_CLIENT_SECRET &&
+    process.env.MICROSOFT_ENTRA_ID_TENANT_ID
+      ? [
+          MicrosoftEntraID({
+            clientId: process.env.MICROSOFT_ENTRA_ID_CLIENT_ID,
+            clientSecret: process.env.MICROSOFT_ENTRA_ID_CLIENT_SECRET,
+            issuer:
+              "https://login.microsoftonline.com/" +
+              process.env.MICROSOFT_ENTRA_ID_TENANT_ID +
+              "/v2.0",
+          }),
+        ]
+      : []),
+  ],
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user?.id) {
+        token.sub = user.id;
+      }
+
+      if (token.sub) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          select: {
+            role: true,
+            membershipTier: true,
+            isSuspended: true,
+          },
+        });
+
+        token.role = dbUser?.role ?? "USER";
+        token.membershipTier = dbUser?.membershipTier ?? "FREE";
+        token.isSuspended = dbUser?.isSuspended ?? true;
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      if (session.user && token.sub) {
+        session.user.id = token.sub;
+        session.user.role = String(token.role);
+        session.user.membershipTier = String(token.membershipTier);
+        session.user.isSuspended = Boolean(token.isSuspended);
+      }
+
+      return session;
+    },
+
+    async signIn({ user }) {
+      if (!user.email) return false;
+
+      const dbUser = await prisma.user.findUnique({
+        where: { email: user.email },
+        select: { isSuspended: true },
+      });
+
+      return !dbUser?.isSuspended;
+    },
+  },
+  pages: {
+    signIn: "/login",
+    error: "/login",
+  },
+  trustHost: true,
+});
+
+====================================================================
+FILE: app/api/auth/[...nextauth]/route.ts
+====================================================================
+
+import { handlers } from "@/auth";
+
+export const { GET, POST } = handlers;
+
+====================================================================
+TYPE AUGMENTATION
+====================================================================
+
+FILE: types/next-auth.d.ts
+
+import "next-auth";
+import "next-auth/jwt";
+
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      email?: string | null;
+      name?: string | null;
+      image?: string | null;
+      role: string;
+      membershipTier: string;
+      isSuspended: boolean;
+    };
+  }
+
+  interface User {
+    role?: string;
+    membershipTier?: string;
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    role?: string;
+    membershipTier?: string;
+    isSuspended?: boolean;
+  }
+}
+
+====================================================================
+FILE: lib/errors.ts
+====================================================================
+
+export class AppError extends Error {
+  constructor(
+    public code: string,
+    public status: number,
+    message?: string,
+    public details?: Record<string, unknown>
+  ) {
+    super(message ?? code);
+    this.name = "AppError";
+  }
+}
+
+export function toErrorResponse(error: unknown) {
+  if (error instanceof AppError) {
+    return {
+      status: error.status,
+      body: {
+        error: error.code,
+        message: error.message,
+        details: error.details,
+      },
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      status: 400,
+      body: {
+        error: error.message,
+      },
+    };
+  }
+
+  return {
+    status: 500,
+    body: {
+      error: "UNKNOWN_ERROR",
+    },
+  };
+}
+
+====================================================================
+FILE: lib/request-context.ts
+====================================================================
+
+import { headers } from "next/headers";
+
+export async function getRequestContext() {
+  const requestHeaders = await headers();
+
+  const forwardedFor = requestHeaders.get("x-forwarded-for");
+  const ipAddress = forwardedFor
+    ? forwardedFor.split(",")[0].trim()
+    : requestHeaders.get("x-real-ip") ?? undefined;
+
+  return {
+    ipAddress,
+    userAgent: requestHeaders.get("user-agent") ?? undefined,
+    requestId:
+      requestHeaders.get("x-request-id") ??
+      crypto.randomUUID(),
+  };
+}
+
+====================================================================
+FILE: lib/redis.ts
+====================================================================
+
+import IORedis from "ioredis";
+
+const globalForRedis = globalThis as unknown as {
+  redis?: IORedis;
+};
+
+export const redis =
+  globalForRedis.redis ??
+  new IORedis(process.env.REDIS_URL!, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: true,
+    lazyConnect: false,
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForRedis.redis = redis;
+}
+
+====================================================================
+FILE: lib/distributed-lock.ts
+====================================================================
+
+import { redis } from "@/lib/redis";
+import { AppError } from "@/lib/errors";
+
+export async function withDistributedLock<T>(
+  key: string,
+  ttlMs: number,
+  operation: () => Promise<T>
+): Promise<T> {
+  const token = crypto.randomUUID();
+  const acquired = await redis.set(key, token, "PX", ttlMs, "NX");
+
+  if (acquired !== "OK") {
+    throw new AppError("RESOURCE_BUSY", 409);
+  }
+
+  try {
+    return await operation();
+  } finally {
+    const current = await redis.get(key);
+    if (current === token) {
+      await redis.del(key);
+    }
+  }
+}
+
+====================================================================
+FILE: lib/rate-limit.ts
+====================================================================
+
+import { redis } from "@/lib/redis";
+import { AppError } from "@/lib/errors";
+
+export async function enforceRateLimit(
+  key: string,
+  limit = 10,
+  windowSeconds = 60
+) {
+  const redisKey = `ratelimit:${key}`;
+  const count = await redis.incr(redisKey);
+
+  if (count === 1) {
+    await redis.expire(redisKey, windowSeconds);
+  }
+
+  if (count > limit) {
+    const ttl = await redis.ttl(redisKey);
+
+    throw new AppError(
+      "RATE_LIMITED",
+      429,
+      "Too many requests. Please try again later.",
+      { retryAfterSeconds: Math.max(ttl, 1) }
+    );
+  }
+}
+
+====================================================================
+FILE: lib/queue.ts
+====================================================================
+
+import { Queue } from "bullmq";
+import { redis } from "@/lib/redis";
+
+export const conciergeQueue = new Queue("concierge", {
+  connection: redis,
+});
+
+export const notificationQueue = new Queue("notifications", {
+  connection: redis,
+});
+
+export const paymentQueue = new Queue("payments", {
+  connection: redis,
+});
+
+export const analyticsQueue = new Queue("analytics", {
+  connection: redis,
+});
+
+export async function enqueueConciergeReview(requestId: string) {
+  await conciergeQueue.add(
+    "review-request",
+    { requestId },
+    {
+      jobId: `review-request:${requestId}`,
+      attempts: 5,
+      backoff: { type: "exponential", delay: 5000 },
+      removeOnComplete: 1000,
+      removeOnFail: 5000,
+    }
+  );
+}
+
+export async function enqueueOutreach(requestId: string) {
+  await conciergeQueue.add(
+    "send-outreach",
+    { requestId },
+    {
+      jobId: `send-outreach:${requestId}`,
+      attempts: 5,
+      backoff: { type: "exponential", delay: 5000 },
+    }
+  );
+}
+
+export async function enqueueNotification(
+  notificationId: string,
+  userId: string
+) {
+  await notificationQueue.add(
+    "deliver-notification",
+    { notificationId, userId },
+    {
+      jobId: `notification:${notificationId}`,
+      attempts: 5,
+      backoff: { type: "exponential", delay: 5000 },
+    }
+  );
+}
+
+====================================================================
+FILE: lib/feature-flags.ts
+====================================================================
+
+import { FeatureFlagKey } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+
+const envDefaults: Record<FeatureFlagKey, boolean> = {
+  CONCIERGE_ENABLED:
+    process.env.CONCIERGE_FEATURE_ENABLED === "true",
+  CONCIERGE_PURCHASE_ENABLED: true,
+  CONCIERGE_REQUEST_ENABLED: true,
+  CONCIERGE_STAFF_OUTREACH_ENABLED: true,
+  PROFILE_REVIEW_ENABLED: true,
+  PROFILE_OPTIMIZATION_ENABLED: true,
+  PHOTO_REVIEW_ENABLED: true,
+  BACKGROUND_CHECK_ENABLED: false,
+  DATE_PLANNING_ENABLED: true,
+  RELATIONSHIP_COACHING_ENABLED: true,
+  PRIORITY_SUPPORT_ENABLED: true,
+};
+
+export async function isFeatureEnabled(key: FeatureFlagKey) {
+  const flag = await prisma.featureFlag.findUnique({
+    where: { key },
+    select: { enabled: true },
+  });
+
+  return flag?.enabled ?? envDefaults[key];
+}
+
+export async function requireFeature(key: FeatureFlagKey) {
+  const enabled = await isFeatureEnabled(key);
+
+  if (!enabled) {
+    throw new Error("FEATURE_DISABLED");
+  }
+}
+
+====================================================================
+FILE: lib/operational-settings.ts
+====================================================================
+
+import { prisma } from "@/lib/prisma";
+
+export const settingDefaults = {
+  staffSlaHours: Number(process.env.CONCIERGE_STAFF_SLA_HOURS ?? 24),
+  outreachSlaHours: Number(
+    process.env.CONCIERGE_OUTREACH_SLA_HOURS ?? 48
+  ),
+  maxStaffActiveCases: Number(
+    process.env.CONCIERGE_MAX_STAFF_ACTIVE_CASES ?? 25
+  ),
+  autoAssignEnabled:
+    process.env.CONCIERGE_AUTO_ASSIGN_ENABLED === "true",
+  allowCustomStaffMessage:
+    process.env.CONCIERGE_ALLOW_CUSTOM_STAFF_MESSAGE === "true",
+  requireRecipientProfileActive:
+    process.env.CONCIERGE_REQUIRE_RECIPIENT_PROFILE_ACTIVE === "true",
+  requirePriorMessage:
+    process.env.CONCIERGE_REQUIRE_PRIOR_MESSAGE === "true",
+  minPriorMessages: Number(
+    process.env.CONCIERGE_MIN_PRIOR_MESSAGES ?? 1
+  ),
+};
+
+export async function getOperationalSetting<T>(
+  key: string,
+  fallback: T
+): Promise<T> {
+  const setting = await prisma.operationalSetting.findUnique({
+    where: { key },
+    select: { valueJson: true },
+  });
+
+  return (setting?.valueJson as T | undefined) ?? fallback;
+}
+
+export async function getConciergeOperations() {
+  return {
+    staffSlaHours: await getOperationalSetting(
+      "concierge.staffSlaHours",
+      settingDefaults.staffSlaHours
+    ),
+    outreachSlaHours: await getOperationalSetting(
+      "concierge.outreachSlaHours",
+      settingDefaults.outreachSlaHours
+    ),
+    maxStaffActiveCases: await getOperationalSetting(
+      "concierge.maxStaffActiveCases",
+      settingDefaults.maxStaffActiveCases
+    ),
+    autoAssignEnabled: await getOperationalSetting(
+      "concierge.autoAssignEnabled",
+      settingDefaults.autoAssignEnabled
+    ),
+    allowCustomStaffMessage: await getOperationalSetting(
+      "concierge.allowCustomStaffMessage",
+      settingDefaults.allowCustomStaffMessage
+    ),
+    requireRecipientProfileActive: await getOperationalSetting(
+      "concierge.requireRecipientProfileActive",
+      settingDefaults.requireRecipientProfileActive
+    ),
+    requirePriorMessage: await getOperationalSetting(
+      "concierge.requirePriorMessage",
+      settingDefaults.requirePriorMessage
+    ),
+    minPriorMessages: await getOperationalSetting(
+      "concierge.minPriorMessages",
+      settingDefaults.minPriorMessages
+    ),
+  };
+}
+
+====================================================================
+FILE: lib/moderation.ts
+====================================================================
+
+type ModerationResult = {
+  allowed: boolean;
+  score: number;
+  decision: "ALLOW" | "REVIEW" | "REJECT";
+  normalizedText: string;
+  matchedRules: string[];
+};
+
+const rejectPatterns: Array<[string, RegExp]> = [
+  ["OFF_PLATFORM_PHONE", /(?:\+?\d[\d\s\-().]{7,}\d)/i],
+  ["OFF_PLATFORM_EMAIL", /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i],
+  ["SOCIAL_HANDLE", /(?:instagram|insta|snapchat|telegram|whatsapp|signal)\s*[:@]?\s*\w+/i],
+  ["THREAT", /\b(?:hurt|kill|attack|find where you live|you will regret)\b/i],
+  ["COERCION", /\b(?:you owe me|must reply|make her reply|force him|force her)\b/i],
+  ["SEXUAL_PRESSURE", /\b(?:send nudes|sex now|sleep with me|hook up tonight)\b/i],
+  ["PAYMENT_OFFER", /\b(?:pay you|cash for|money if you reply)\b/i],
+];
+
+const reviewPatterns: Array<[string, RegExp]> = [
+  ["ANGER", /\b(?:angry|ignored me|disrespectful|ghosted)\b/i],
+  ["REPEATED_CONTACT", /\b(?:again and again|many times|keeps ignoring)\b/i],
+  ["ACTIVITY_SURVEILLANCE", /\b(?:online but not replying|saw her active|last seen)\b/i],
+];
+
+export function moderateConciergeText(text: string): ModerationResult {
+  const normalizedText = text
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const matchedRules: string[] = [];
+  let score = 0;
+
+  for (const [name, pattern] of rejectPatterns) {
+    if (pattern.test(normalizedText)) {
+      matchedRules.push(name);
+      score += 50;
+    }
+  }
+
+  for (const [name, pattern] of reviewPatterns) {
+    if (pattern.test(normalizedText)) {
+      matchedRules.push(name);
+      score += 15;
+    }
+  }
+
+  if (normalizedText.length < 10) {
+    matchedRules.push("TOO_SHORT");
+    score += 20;
+  }
+
+  if (score >= 50) {
+    return {
+      allowed: false,
+      score,
+      decision: "REJECT",
+      normalizedText,
+      matchedRules,
+    };
+  }
+
+  if (score >= 15) {
+    return {
+      allowed: true,
+      score,
+      decision: "REVIEW",
+      normalizedText,
+      matchedRules,
+    };
+  }
+
+  return {
+    allowed: true,
+    score,
+    decision: "ALLOW",
+    normalizedText,
+    matchedRules,
+  };
+}
+
+====================================================================
+FILE: lib/staff-assignment.ts
+====================================================================
+
+import { prisma } from "@/lib/prisma";
+import { getConciergeOperations } from "@/lib/operational-settings";
+
+export async function assignBestAvailableStaff(
+  conciergeRequestId: string,
+  assignedById?: string
+) {
+  const operations = await getConciergeOperations();
+
+  const staffMembers = await prisma.user.findMany({
+    where: {
+      role: { in: ["STAFF", "ADMIN"] },
+      isSuspended: false,
+    },
+    select: {
+      id: true,
+      name: true,
+      _count: {
+        select: {
+          conciergeAssignedCases: {
+            where: {
+              status: { in: ["ASSIGNED", "ACCEPTED"] },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const candidate = staffMembers
+    .filter(
+      (staff) =>
+        staff._count.conciergeAssignedCases <
+        operations.maxStaffActiveCases
+    )
+    .sort(
+      (a, b) =>
+        a._count.conciergeAssignedCases -
+        b._count.conciergeAssignedCases
+    )[0];
+
+  if (!candidate) {
+    return null;
+  }
+
+  return prisma.staffAssignment.upsert({
+    where: { conciergeRequestId },
+    update: {
+      staffId: candidate.id,
+      assignedById,
+      status: "ASSIGNED",
+      assignedAt: new Date(),
+      releasedAt: null,
+    },
+    create: {
+      conciergeRequestId,
+      staffId: candidate.id,
+      assignedById,
+    },
+  });
+}
+
+====================================================================
+FILE: lib/notification-provider.ts
+====================================================================
+
+import { Resend } from "resend";
+import { prisma } from "@/lib/prisma";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+export async function deliverEmail(input: {
+  deliveryId: string;
+  to: string;
+  subject: string;
+  html: string;
+}) {
+  const delivery = await prisma.notificationDelivery.findUnique({
+    where: { id: input.deliveryId },
+  });
+
+  if (!delivery || delivery.status === "DELIVERED") {
+    return;
+  }
+
+  try {
+    const response = await resend.emails.send({
+      from: process.env.EMAIL_FROM!,
+      to: input.to,
+      replyTo: process.env.EMAIL_REPLY_TO,
+      subject: input.subject,
+      html: input.html,
+    });
+
+    await prisma.notificationDelivery.update({
+      where: { id: input.deliveryId },
+      data: {
+        provider: "resend",
+        providerMessageId: response.data?.id,
+        status: "SENT",
+        attemptCount: { increment: 1 },
+        sentAt: new Date(),
+        lastError: null,
+      },
+    });
+  } catch (error) {
+    await prisma.notificationDelivery.update({
+      where: { id: input.deliveryId },
+      data: {
+        status: "FAILED",
+        attemptCount: { increment: 1 },
+        lastError:
+          error instanceof Error ? error.message : "EMAIL_SEND_FAILED",
+        nextAttemptAt: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    });
+
+    throw error;
+  }
+}
+
+====================================================================
+REPLACE FILE: lib/notifications.ts
+====================================================================
+
+import { NotificationType } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { enqueueNotification } from "@/lib/queue";
+
+export async function createNotification(input: {
+  userId: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+}) {
+  const notification = await prisma.notification.create({
+    data: {
+      userId: input.userId,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      data: input.data ?? {},
+    },
+  });
+
+  await enqueueNotification(notification.id, input.userId);
+
+  return notification;
+}
+
+====================================================================
+FILE: worker/index.ts
+====================================================================
+
+import "./concierge.worker";
+import "./notification.worker";
+import "./payment.worker";
+import "./analytics.worker";
+
+console.log("DateBuk concierge workers started.");
+
+process.on("SIGTERM", () => {
+  console.log("Worker received SIGTERM.");
+  process.exit(0);
+});
+
+process.on("SIGINT", () => {
+  console.log("Worker received SIGINT.");
+  process.exit(0);
+});
+
+====================================================================
+FILE: worker/concierge.worker.ts
+====================================================================
+
+import { Worker } from "bullmq";
+import { redis } from "@/lib/redis";
+import { prisma } from "@/lib/prisma";
+import { assignBestAvailableStaff } from "@/lib/staff-assignment";
+import { createNotification } from "@/lib/notifications";
+
+export const conciergeWorker = new Worker(
+  "concierge",
+  async (job) => {
+    if (job.name === "review-request") {
+      const request = await prisma.conciergeRequest.findUnique({
+        where: { id: job.data.requestId },
+      });
+
+      if (!request || request.status !== "PENDING_REVIEW") return;
+
+      const assignment = await assignBestAvailableStaff(request.id);
+
+      if (assignment) {
+        await createNotification({
+          userId: assignment.staffId,
+          type: "STAFF_ASSIGNMENT",
+          title: "New concierge request assigned",
+          body: "A concierge request is waiting for your review.",
+          data: { requestId: request.id },
+        });
+      }
+
+      return;
+    }
+
+    if (job.name === "send-outreach") {
+      const request = await prisma.conciergeRequest.findUnique({
+        where: { id: job.data.requestId },
+        include: {
+          requester: true,
+          recipient: true,
+        },
+      });
+
+      if (!request || request.status !== "APPROVED") return;
+      if (request.recipient.conciergeOptOut) return;
+
+      const staffMessage =
+        "A member has requested a one-time concierge introduction. " +
+        "There is no obligation to respond. You may accept, decline, " +
+        "block, report, or opt out.";
+
+      await prisma.conciergeRequest.update({
+        where: { id: request.id },
+        data: {
+          status: "OUTREACH_SENT",
+          staffMessage,
+          outreachSentAt: new Date(),
+          messages: {
+            create: {
+              senderId: request.staffId,
+              senderRole: "STAFF",
+              content: staffMessage,
+              internal: false,
+            },
+          },
+        },
+      });
+
+      await createNotification({
+        userId: request.recipientId,
+        type: "CONCIERGE_OUTREACH_SENT",
+        title: "Concierge introduction received",
+        body: "A one-time introduction is waiting for your decision.",
+        data: { requestId: request.id },
+      });
+
+      await createNotification({
+        userId: request.requesterId,
+        type: "CONCIERGE_OUTREACH_SENT",
+        title: "Concierge outreach sent",
+        body: "The recipient may now respond privately.",
+        data: { requestId: request.id },
+      });
+    }
+  },
+  {
+    connection: redis,
+    concurrency: 10,
+  }
+);
+
+conciergeWorker.on("failed", (job, error) => {
+  console.error("Concierge job failed", {
+    jobId: job?.id,
+    jobName: job?.name,
+    error: error.message,
+  });
+});
+
+====================================================================
+FILE: worker/notification.worker.ts
+====================================================================
+
+import { Worker } from "bullmq";
+import { redis } from "@/lib/redis";
+import { prisma } from "@/lib/prisma";
+import { deliverEmail } from "@/lib/notification-provider";
+
+export const notificationWorker = new Worker(
+  "notifications",
+  async (job) => {
+    if (job.name !== "deliver-notification") return;
+
+    const notification = await prisma.notification.findUnique({
+      where: { id: job.data.notificationId },
+      include: { user: true },
+    });
+
+    if (!notification || !notification.user.email) return;
+
+    const delivery = await prisma.notificationDelivery.create({
+      data: {
+        notificationId: notification.id,
+        userId: notification.userId,
+        channel: "EMAIL",
+        destination: notification.user.email,
+        provider: "resend",
+      },
+    });
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL!;
+
+    await deliverEmail({
+      deliveryId: delivery.id,
+      to: notification.user.email,
+      subject: notification.title,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+          <h2>${escapeHtml(notification.title)}</h2>
+          <p>${escapeHtml(notification.body)}</p>
+          <p>
+            <a href="${appUrl}/notifications"
+               style="display:inline-block;padding:12px 18px;background:#ec4899;color:white;text-decoration:none;border-radius:8px">
+              Open DateBuk
+            </a>
+          </p>
+          <p style="font-size:12px;color:#64748b">
+            Never share personal contact details in response to a concierge message.
+          </p>
+        </div>
+      `,
+    });
+  },
+  {
+    connection: redis,
+    concurrency: 20,
+  }
+);
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+====================================================================
+FILE: worker/payment.worker.ts
+====================================================================
+
+import { Worker } from "bullmq";
+import { redis } from "@/lib/redis";
+import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
+
+export const paymentWorker = new Worker(
+  "payments",
+  async (job) => {
+    if (job.name !== "reconcile-payment") return;
+
+    const payment = await prisma.payment.findUnique({
+      where: { id: job.data.paymentId },
+    });
+
+    if (!payment?.stripeCheckoutSessionId) return;
+    if (payment.status === "PAID") return;
+
+    const session = await stripe.checkout.sessions.retrieve(
+      payment.stripeCheckoutSessionId
+    );
+
+    if (session.payment_status !== "paid") return;
+
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "PAID",
+        stripePaymentIntentId:
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : undefined,
+      },
+    });
+  },
+  {
+    connection: redis,
+    concurrency: 5,
+  }
+);
+
+====================================================================
+FILE: worker/analytics.worker.ts
+====================================================================
+
+import { Worker } from "bullmq";
+import { redis } from "@/lib/redis";
+import { prisma } from "@/lib/prisma";
+
+export const analyticsWorker = new Worker(
+  "analytics",
+  async (job) => {
+    if (job.name !== "daily-snapshot") return;
+
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+
+    const [
+      totalRequests,
+      interested,
+      declined,
+      pending,
+      revenue,
+    ] = await Promise.all([
+      prisma.conciergeRequest.count({
+        where: { createdAt: { gte: date } },
+      }),
+      prisma.conciergeRequest.count({
+        where: {
+          status: "RECIPIENT_INTERESTED",
+          respondedAt: { gte: date },
+        },
+      }),
+      prisma.conciergeRequest.count({
+        where: {
+          status: "RECIPIENT_DECLINED",
+          respondedAt: { gte: date },
+        },
+      }),
+      prisma.conciergeRequest.count({
+        where: { status: "PENDING_REVIEW" },
+      }),
+      prisma.payment.aggregate({
+        where: {
+          status: "PAID",
+          createdAt: { gte: date },
+        },
+        _sum: { amountCents: true },
+      }),
+    ]);
+
+    console.info("Daily concierge snapshot", {
+      date: date.toISOString(),
+      totalRequests,
+      interested,
+      declined,
+      pending,
+      revenueCents: revenue._sum.amountCents ?? 0,
+    });
+  },
+  {
+    connection: redis,
+    concurrency: 1,
+  }
+);
+
+====================================================================
+REPLACE PART OF REQUEST CREATION ROUTE
+====================================================================
+
+In:
+app/api/concierge/requests/route.ts
+
+Add imports:
+
+import { moderateConciergeText } from "@/lib/moderation";
+import { enqueueConciergeReview } from "@/lib/queue";
+import { withDistributedLock } from "@/lib/distributed-lock";
+import { requireFeature } from "@/lib/feature-flags";
+import { getRequestContext } from "@/lib/request-context";
+
+Replace POST with:
+
+export async function POST(request: Request) {
+  try {
+    await requireFeature("CONCIERGE_ENABLED");
+    await requireFeature("CONCIERGE_REQUEST_ENABLED");
+
+    const user = await requireUser();
+    await enforceRateLimit(`concierge-create:${user.id}`, 5, 60);
+
+    const body = createConciergeRequestSchema.parse(await request.json());
+    const moderation = moderateConciergeText(body.requesterMessage);
+
+    if (!moderation.allowed) {
+      return NextResponse.json(
+        {
+          error: "MESSAGE_REJECTED",
+          matchedRules: moderation.matchedRules,
+        },
+        { status: 422 }
+      );
+    }
+
+    const context = await getRequestContext();
+
+    const created = await withDistributedLock(
+      `lock:concierge-pair:${user.id}:${body.recipientId}`,
+      15_000,
+      async () => {
+        const eligibility = await evaluateConciergeEligibility(
+          user.id,
+          body.recipientId
+        );
+
+        if (!eligibility.allowed) {
+          throw new Error(eligibility.code);
+        }
+
+        return prisma.$transaction(async (tx) => {
+          const wallet = await tx.conciergeWallet.updateMany({
+            where: {
+              userId: user.id,
+              availableCredits: { gte: 1 },
+            },
+            data: {
+              availableCredits: { decrement: 1 },
+              lifetimeUsed: { increment: 1 },
+            },
+          });
+
+          if (wallet.count !== 1) {
+            throw new Error("NO_CREDITS");
+          }
+
+          const concierge = await tx.conciergeRequest.create({
+            data: {
+              requesterId: user.id,
+              recipientId: body.recipientId,
+              reason: body.reason,
+              requesterMessage: moderation.normalizedText,
+              creditConsumed: true,
+              expiresAt: conciergeExpiryDate(),
+              messages: {
+                create: {
+                  senderId: user.id,
+                  senderRole: user.role,
+                  content: moderation.normalizedText,
+                  internal: true,
+                },
+              },
+            },
+          });
+
+          await tx.moderationDecision.create({
+            data: {
+              conciergeRequestId: concierge.id,
+              decision: moderation.decision,
+              score: moderation.score,
+              matchedRules: moderation.matchedRules,
+              normalizedText: moderation.normalizedText,
+            },
+          });
+
+          return concierge;
+        });
+      }
+    );
+
+    await writeAuditLog({
+      actorId: user.id,
+      action: "CONCIERGE_REQUEST_CREATED",
+      entityType: "ConciergeRequest",
+      entityId: created.id,
+      conciergeRequestId: created.id,
+      metadata: {
+        recipientId: body.recipientId,
+        reason: body.reason,
+        moderationDecision: moderation.decision,
+      },
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
+
+    await enqueueConciergeReview(created.id);
+
+    await createNotification({
+      userId: user.id,
+      type: "CONCIERGE_SUBMITTED",
+      title: "Concierge request submitted",
+      body: "Your request is waiting for staff review.",
+      data: { requestId: created.id },
+    });
+
+    return NextResponse.json(created, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+
+    const status =
+      message === "UNAUTHORIZED"
+        ? 401
+        : message === "RATE_LIMITED"
+        ? 429
+        : [
+            "NO_CREDITS",
+            "PAIR_COOLDOWN_ACTIVE",
+            "MONTHLY_LIMIT_REACHED",
+          ].includes(message)
+        ? 409
+        : 400;
+
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+====================================================================
+FILE: app/api/concierge/settings/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { writeAuditLog } from "@/lib/audit";
+
+const updateSchema = z.object({
+  conciergeOptOut: z.boolean(),
+});
+
+export async function GET() {
+  try {
+    const user = await requireUser();
+
+    return NextResponse.json({
+      conciergeOptOut: user.conciergeOptOut,
+      membershipTier: user.membershipTier,
+    });
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const user = await requireUser();
+    const body = updateSchema.parse(await request.json());
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        conciergeOptOut: body.conciergeOptOut,
+      },
+      select: {
+        conciergeOptOut: true,
+      },
+    });
+
+    await writeAuditLog({
+      actorId: user.id,
+      action: body.conciergeOptOut
+        ? "CONCIERGE_OPT_OUT_ENABLED"
+        : "CONCIERGE_OPT_OUT_DISABLED",
+      entityType: "User",
+      entityId: user.id,
+    });
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FILE: app/api/concierge/requests/[id]/cancel/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { writeAuditLog } from "@/lib/audit";
+
+export async function POST(
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireUser();
+    const { id } = await context.params;
+
+    const concierge = await prisma.conciergeRequest.findFirst({
+      where: {
+        id,
+        requesterId: user.id,
+        status: "PENDING_REVIEW",
+      },
+    });
+
+    if (!concierge) {
+      return NextResponse.json(
+        { error: "REQUEST_CANNOT_BE_CANCELLED" },
+        { status: 409 }
+      );
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (concierge.creditConsumed) {
+        await tx.conciergeWallet.update({
+          where: { userId: user.id },
+          data: {
+            availableCredits: { increment: 1 },
+            lifetimeUsed: { decrement: 1 },
+          },
+        });
+      }
+
+      return tx.conciergeRequest.update({
+        where: { id },
+        data: {
+          status: "CANCELLED",
+          creditConsumed: false,
+          completedAt: new Date(),
+        },
+      });
+    });
+
+    await writeAuditLog({
+      actorId: user.id,
+      action: "CONCIERGE_REQUEST_CANCELLED",
+      entityType: "ConciergeRequest",
+      entityId: id,
+      conciergeRequestId: id,
+    });
+
+    return NextResponse.json(updated);
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+}
+
+====================================================================
+FILE: app/api/concierge/requests/[id]/appeal/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { writeAuditLog } from "@/lib/audit";
+
+const appealSchema = z.object({
+  reason: z.string().trim().min(20).max(1000),
+});
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireUser();
+    const { id } = await context.params;
+    const body = appealSchema.parse(await request.json());
+
+    const concierge = await prisma.conciergeRequest.findFirst({
+      where: {
+        id,
+        requesterId: user.id,
+        status: "REJECTED",
+      },
+    });
+
+    if (!concierge || !concierge.completedAt) {
+      return NextResponse.json(
+        { error: "APPEAL_NOT_AVAILABLE" },
+        { status: 409 }
+      );
+    }
+
+    const appealWindowHours = Number(
+      process.env.CONCIERGE_APPEAL_WINDOW_HOURS ?? 72
+    );
+
+    const deadline =
+      concierge.completedAt.getTime() +
+      appealWindowHours * 60 * 60 * 1000;
+
+    if (Date.now() > deadline) {
+      return NextResponse.json(
+        { error: "APPEAL_WINDOW_EXPIRED" },
+        { status: 409 }
+      );
+    }
+
+    const existing = await prisma.conciergeAppeal.findFirst({
+      where: {
+        conciergeRequestId: id,
+        requesterId: user.id,
+        status: { in: ["PENDING", "APPROVED"] },
+      },
+    });
+
+    if (existing) {
+      return NextResponse.json(
+        { error: "APPEAL_ALREADY_EXISTS" },
+        { status: 409 }
+      );
+    }
+
+    const appeal = await prisma.conciergeAppeal.create({
+      data: {
+        conciergeRequestId: id,
+        requesterId: user.id,
+        reason: body.reason,
+      },
+    });
+
+    await writeAuditLog({
+      actorId: user.id,
+      action: "CONCIERGE_APPEAL_CREATED",
+      entityType: "ConciergeAppeal",
+      entityId: appeal.id,
+      conciergeRequestId: id,
+    });
+
+    return NextResponse.json(appeal, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FILE: app/api/concierge/requests/[id]/messages/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { moderateConciergeText } from "@/lib/moderation";
+
+const messageSchema = z.object({
+  content: z.string().trim().min(1).max(500),
+});
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireUser();
+    const { id } = await context.params;
+
+    const concierge = await prisma.conciergeRequest.findFirst({
+      where: {
+        id,
+        OR: [
+          { requesterId: user.id },
+          { recipientId: user.id },
+          ...(user.role !== "USER" ? [{}] : []),
+        ],
+      },
+    });
+
+    if (!concierge) {
+      return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    }
+
+    const messages = await prisma.conciergeMessage.findMany({
+      where: {
+        requestId: id,
+        ...(user.role === "USER" ? { internal: false } : {}),
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return NextResponse.json(messages);
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireUser();
+    const { id } = await context.params;
+    const body = messageSchema.parse(await request.json());
+
+    const concierge = await prisma.conciergeRequest.findFirst({
+      where: {
+        id,
+        status: "RECIPIENT_INTERESTED",
+        OR: [
+          { requesterId: user.id },
+          { recipientId: user.id },
+        ],
+      },
+    });
+
+    if (!concierge) {
+      return NextResponse.json(
+        { error: "MESSAGING_NOT_AVAILABLE" },
+        { status: 409 }
+      );
+    }
+
+    const moderation = moderateConciergeText(body.content);
+
+    if (!moderation.allowed) {
+      return NextResponse.json(
+        { error: "MESSAGE_REJECTED" },
+        { status: 422 }
+      );
+    }
+
+    const created = await prisma.conciergeMessage.create({
+      data: {
+        requestId: id,
+        senderId: user.id,
+        senderRole: user.role,
+        content: moderation.normalizedText,
+        internal: false,
+      },
+    });
+
+    return NextResponse.json(created, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FIXED STAFF SERVICE ORDER ROUTE
+====================================================================
+
+Replace:
+app/api/staff/service-orders/route.ts
+
+with:
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { createNotification } from "@/lib/notifications";
+import { writeAuditLog } from "@/lib/audit";
+
+const staffServiceUpdateSchema = z.object({
+  orderId: z.string().cuid(),
+  action: z.enum([
+    "ASSIGN_TO_ME",
+    "START",
+    "REQUEST_MEMBER_INFO",
+    "COMPLETE",
+    "CANCEL",
+  ]),
+  staffNotes: z.string().max(3000).optional(),
+  delivery: z.record(z.string(), z.unknown()).optional(),
+});
+
+export async function GET() {
+  try {
+    await requireRole(["STAFF", "ADMIN"]);
+
+    const orders = await prisma.serviceOrder.findMany({
+      where: {
+        status: {
+          in: ["PAID", "ASSIGNED", "IN_PROGRESS", "AWAITING_MEMBER"],
+        },
+      },
+      include: {
+        member: { select: { id: true, name: true, email: true } },
+        service: true,
+        assignedStaff: { select: { id: true, name: true } },
+      },
+      orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
+    });
+
+    return NextResponse.json(orders);
+  } catch {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const staff = await requireRole(["STAFF", "ADMIN"]);
+    const body = staffServiceUpdateSchema.parse(await request.json());
+
+    const dataByAction = {
+      ASSIGN_TO_ME: {
+        status: "ASSIGNED" as const,
+        assignedStaffId: staff.id,
+      },
+      START: {
+        status: "IN_PROGRESS" as const,
+        assignedStaffId: staff.id,
+      },
+      REQUEST_MEMBER_INFO: {
+        status: "AWAITING_MEMBER" as const,
+        assignedStaffId: staff.id,
+      },
+      COMPLETE: {
+        status: "COMPLETED" as const,
+        assignedStaffId: staff.id,
+        completedAt: new Date(),
+        deliveryJson: body.delivery ?? {},
+      },
+      CANCEL: {
+        status: "CANCELLED" as const,
+        assignedStaffId: staff.id,
+      },
+    };
+
+    const updated = await prisma.serviceOrder.update({
+      where: { id: body.orderId },
+      data: {
+        ...dataByAction[body.action],
+        staffNotes: body.staffNotes,
+      },
+      include: {
+        service: true,
+        member: true,
+      },
+    });
+
+    await createNotification({
+      userId: updated.memberId,
+      type: "SERVICE_ORDER_UPDATE",
+      title: `${updated.service.name} updated`,
+      body: `Order status: ${updated.status.replaceAll("_", " ")}`,
+      data: { orderId: updated.id },
+    });
+
+    await writeAuditLog({
+      actorId: staff.id,
+      action: `SERVICE_ORDER_${body.action}`,
+      entityType: "ServiceOrder",
+      entityId: updated.id,
+      serviceOrderId: updated.id,
+    });
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FILE: lib/stripe-sync.ts
+====================================================================
+
+import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
+
+export async function syncServiceCatalogToStripe() {
+  const services = await prisma.serviceCatalog.findMany({
+    where: { active: true },
+    include: { stripeLink: true },
+  });
+
+  const results = [];
+
+  for (const service of services) {
+    let productId = service.stripeLink?.stripeProductId;
+
+    if (!productId) {
+      const product = await stripe.products.create({
+        name: service.name,
+        description: service.shortDescription,
+        metadata: {
+          serviceCatalogId: service.id,
+          serviceType: service.type,
+        },
+      });
+
+      productId = product.id;
+    } else {
+      await stripe.products.update(productId, {
+        name: service.name,
+        description: service.shortDescription,
+        active: service.active,
+      });
+    }
+
+    let priceId = service.stripeLink?.stripePriceId;
+    let needsNewPrice = true;
+
+    if (priceId) {
+      const currentPrice = await stripe.prices.retrieve(priceId);
+      needsNewPrice =
+        currentPrice.unit_amount !== service.priceCents ||
+        currentPrice.currency !== service.currency;
+    }
+
+    if (needsNewPrice) {
+      const price = await stripe.prices.create({
+        product: productId,
+        unit_amount: service.priceCents,
+        currency: service.currency,
+        metadata: {
+          serviceCatalogId: service.id,
+        },
+      });
+
+      priceId = price.id;
+    }
+
+    const link = await prisma.stripeCatalogLink.upsert({
+      where: { serviceCatalogId: service.id },
+      update: {
+        stripeProductId: productId,
+        stripePriceId: priceId!,
+        active: service.active,
+        syncedAt: new Date(),
+      },
+      create: {
+        serviceCatalogId: service.id,
+        stripeProductId: productId,
+        stripePriceId: priceId!,
+        active: service.active,
+      },
+    });
+
+    results.push(link);
+  }
+
+  return results;
+}
+
+====================================================================
+FILE: app/api/admin/stripe-sync/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { syncServiceCatalogToStripe } from "@/lib/stripe-sync";
+
+export async function POST() {
+  try {
+    await requireRole(["ADMIN"]);
+
+    const result = await syncServiceCatalogToStripe();
+    return NextResponse.json({
+      synced: result.length,
+      items: result,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+PATCH CHECKOUT ROUTE TO USE SYNCHRONIZED STRIPE PRICE
+====================================================================
+
+In app/api/payments/checkout/route.ts, include stripeLink:
+
+include: {
+  service: {
+    include: {
+      stripeLink: true
+    }
+  }
+}
+
+Replace line_items with:
+
+line_items: order.service.stripeLink?.stripePriceId
+  ? [
+      {
+        quantity: 1,
+        price: order.service.stripeLink.stripePriceId,
+      },
+    ]
+  : [
+      {
+        quantity: 1,
+        price_data: {
+          currency: order.service.currency,
+          unit_amount: order.service.priceCents,
+          product_data: {
+            name: order.service.name,
+            description: order.service.shortDescription,
+          },
+        },
+      },
+    ],
+
+====================================================================
+FILE: app/api/admin/concierge-settings/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { getConciergeOperations } from "@/lib/operational-settings";
+
+const settingsSchema = z.object({
+  staffSlaHours: z.number().int().min(1).max(168),
+  outreachSlaHours: z.number().int().min(1).max(336),
+  maxStaffActiveCases: z.number().int().min(1).max(500),
+  autoAssignEnabled: z.boolean(),
+  allowCustomStaffMessage: z.boolean(),
+  requireRecipientProfileActive: z.boolean(),
+  requirePriorMessage: z.boolean(),
+  minPriorMessages: z.number().int().min(0).max(100),
+});
+
+export async function GET() {
+  try {
+    await requireRole(["ADMIN"]);
+    return NextResponse.json(await getConciergeOperations());
+  } catch {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const admin = await requireRole(["ADMIN"]);
+    const body = settingsSchema.parse(await request.json());
+
+    const entries = Object.entries(body);
+
+    await prisma.$transaction(
+      entries.map(([key, value]) =>
+        prisma.operationalSetting.upsert({
+          where: { key: `concierge.${key}` },
+          update: {
+            valueJson: value,
+            updatedById: admin.id,
+          },
+          create: {
+            key: `concierge.${key}`,
+            valueJson: value,
+            updatedById: admin.id,
+          },
+        })
+      )
+    );
+
+    return NextResponse.json(await getConciergeOperations());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FILE: app/api/admin/feature-flags/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { FeatureFlagKey } from "@prisma/client";
+import { z } from "zod";
+
+const updateSchema = z.object({
+  key: z.nativeEnum(FeatureFlagKey),
+  enabled: z.boolean(),
+  description: z.string().max(500).optional(),
+});
+
+export async function GET() {
+  try {
+    await requireRole(["ADMIN"]);
+
+    const flags = await prisma.featureFlag.findMany({
+      orderBy: { key: "asc" },
+    });
+
+    return NextResponse.json(flags);
+  } catch {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const admin = await requireRole(["ADMIN"]);
+    const body = updateSchema.parse(await request.json());
+
+    const flag = await prisma.featureFlag.upsert({
+      where: { key: body.key },
+      update: {
+        enabled: body.enabled,
+        description: body.description,
+        updatedById: admin.id,
+      },
+      create: {
+        key: body.key,
+        enabled: body.enabled,
+        description: body.description,
+        updatedById: admin.id,
+      },
+    });
+
+    return NextResponse.json(flag);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FILE: app/api/admin/staff-workload/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function GET() {
+  try {
+    await requireRole(["ADMIN"]);
+
+    const staff = await prisma.user.findMany({
+      where: {
+        role: { in: ["STAFF", "ADMIN"] },
+        isSuspended: false,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        _count: {
+          select: {
+            conciergeAssignedCases: {
+              where: {
+                status: { in: ["ASSIGNED", "ACCEPTED"] },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+
+    return NextResponse.json(
+      staff.map((member) => ({
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        activeCases: member._count.conciergeAssignedCases,
+      }))
+    );
+  } catch {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+}
+
+====================================================================
+FILE: app/api/admin/audit-export/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+function csvEscape(value: unknown) {
+  const stringValue =
+    value === null || value === undefined
+      ? ""
+      : typeof value === "string"
+      ? value
+      : JSON.stringify(value);
+
+  return `"${stringValue.replaceAll('"', '""')}"`;
+}
+
+export async function GET(request: Request) {
+  try {
+    await requireRole(["ADMIN"]);
+
+    const url = new URL(request.url);
+    const entityType = url.searchParams.get("entityType") ?? undefined;
+    const from = url.searchParams.get("from");
+    const to = url.searchParams.get("to");
+
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        ...(entityType ? { entityType } : {}),
+        ...(from || to
+          ? {
+              createdAt: {
+                ...(from ? { gte: new Date(from) } : {}),
+                ...(to ? { lte: new Date(to) } : {}),
+              },
+            }
+          : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50_000,
+    });
+
+    const header = [
+      "id",
+      "createdAt",
+      "actorId",
+      "action",
+      "entityType",
+      "entityId",
+      "metadata",
+      "ipAddress",
+      "userAgent",
+    ].join(",");
+
+    const rows = logs.map((log) =>
+      [
+        log.id,
+        log.createdAt.toISOString(),
+        log.actorId,
+        log.action,
+        log.entityType,
+        log.entityId,
+        log.metadata,
+        log.ipAddress,
+        log.userAgent,
+      ]
+        .map(csvEscape)
+        .join(",")
+    );
+
+    const csv = [header, ...rows].join("\n");
+
+    return new NextResponse(csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition":
+          'attachment; filename="datebuk-concierge-audit.csv"',
+      },
+    });
+  } catch {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+}
+
+====================================================================
+FILE: app/api/cron/assign-staff/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { assignBestAvailableStaff } from "@/lib/staff-assignment";
+
+export async function POST(request: Request) {
+  if (
+    request.headers.get("authorization") !==
+    `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const pending = await prisma.conciergeRequest.findMany({
+    where: {
+      status: "PENDING_REVIEW",
+      assignment: null,
+    },
+    select: { id: true },
+    take: 200,
+  });
+
+  let assigned = 0;
+
+  for (const requestItem of pending) {
+    const result = await assignBestAvailableStaff(requestItem.id);
+    if (result) assigned += 1;
+  }
+
+  return NextResponse.json({
+    scanned: pending.length,
+    assigned,
+  });
+}
+
+====================================================================
+FILE: app/api/cron/retry-notifications/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { notificationQueue } from "@/lib/queue";
+
+export async function POST(request: Request) {
+  if (
+    request.headers.get("authorization") !==
+    `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const failed = await prisma.notificationDelivery.findMany({
+    where: {
+      status: "FAILED",
+      attemptCount: { lt: 5 },
+      OR: [
+        { nextAttemptAt: null },
+        { nextAttemptAt: { lte: new Date() } },
+      ],
+    },
+    select: {
+      notificationId: true,
+      userId: true,
+    },
+    take: 500,
+  });
+
+  let queued = 0;
+
+  for (const delivery of failed) {
+    if (!delivery.notificationId) continue;
+
+    await notificationQueue.add(
+      "deliver-notification",
+      {
+        notificationId: delivery.notificationId,
+        userId: delivery.userId,
+      },
+      {
+        attempts: 5,
+        backoff: { type: "exponential", delay: 5000 },
+      }
+    );
+
+    queued += 1;
+  }
+
+  return NextResponse.json({ queued });
+}
+
+====================================================================
+FILE: app/api/cron/reconcile-payments/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { paymentQueue } from "@/lib/queue";
+
+export async function POST(request: Request) {
+  if (
+    request.headers.get("authorization") !==
+    `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const pending = await prisma.payment.findMany({
+    where: {
+      status: "PENDING",
+      stripeCheckoutSessionId: { not: null },
+      createdAt: {
+        lte: new Date(Date.now() - 10 * 60 * 1000),
+      },
+    },
+    select: { id: true },
+    take: 500,
+  });
+
+  for (const payment of pending) {
+    await paymentQueue.add(
+      "reconcile-payment",
+      { paymentId: payment.id },
+      {
+        jobId: `reconcile:${payment.id}`,
+        attempts: 5,
+        backoff: { type: "exponential", delay: 10_000 },
+      }
+    );
+  }
+
+  return NextResponse.json({ queued: pending.length });
+}
+
+====================================================================
+FILE: app/api/health/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { redis } from "@/lib/redis";
+
+export async function GET() {
+  const startedAt = Date.now();
+
+  try {
+    await Promise.all([
+      prisma.$queryRaw`SELECT 1`,
+      redis.ping(),
+    ]);
+
+    return NextResponse.json({
+      status: "healthy",
+      database: "up",
+      redis: "up",
+      latencyMs: Date.now() - startedAt,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        status: "unhealthy",
+        databaseOrRedis: "down",
+        error:
+          error instanceof Error ? error.message : "UNKNOWN_ERROR",
+        timestamp: new Date().toISOString(),
+      },
+      { status: 503 }
+    );
+  }
+}
+
+====================================================================
+FILE: app/api/webhooks/resend/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function POST(request: Request) {
+  /*
+  In production, verify the webhook signature using the provider's
+  official webhook verification method before processing.
+  */
+
+  const event = await request.json();
+  const providerMessageId = event?.data?.email_id;
+
+  if (!providerMessageId) {
+    return NextResponse.json({ received: true });
+  }
+
+  const statusMap: Record<string, string> = {
+    "email.sent": "SENT",
+    "email.delivered": "DELIVERED",
+    "email.bounced": "BOUNCED",
+    "email.complained": "COMPLAINED",
+  };
+
+  const mappedStatus = statusMap[event.type];
+
+  if (mappedStatus) {
+    await prisma.notificationDelivery.updateMany({
+      where: { providerMessageId },
+      data: {
+        status: mappedStatus as never,
+        deliveredAt:
+          mappedStatus === "DELIVERED" ? new Date() : undefined,
+      },
+    });
+  }
+
+  return NextResponse.json({ received: true });
+}
+
+====================================================================
+FILE: components/concierge/ConciergeSettingsForm.tsx
+====================================================================
+
+"use client";
+
+import { useEffect, useState } from "react";
+
+export function ConciergeSettingsForm() {
+  const [optOut, setOptOut] = useState(false);
+  const [saved, setSaved] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/concierge/settings")
+      .then((response) => response.json())
+      .then((data) => {
+        setOptOut(Boolean(data.conciergeOptOut));
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function save() {
+    setSaved("");
+
+    const response = await fetch("/api/concierge/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conciergeOptOut: optOut }),
+    });
+
+    const data = await response.json();
+    setSaved(response.ok ? "Settings saved." : data.error);
+  }
+
+  if (loading) {
+    return <p>Loading settings...</p>;
+  }
+
+  return (
+    <section className="rounded-3xl border bg-white p-6 shadow-sm">
+      <h2 className="text-xl font-bold">Concierge Privacy</h2>
+
+      <label className="mt-5 flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={optOut}
+          onChange={(event) => setOptOut(event.target.checked)}
+          className="mt-1"
+        />
+        <span>
+          <strong>Do not allow concierge introductions to me.</strong>
+          <span className="mt-1 block text-sm text-slate-600">
+            Staff will automatically reject future concierge requests
+            involving your profile.
+          </span>
+        </span>
+      </label>
+
+      <button
+        onClick={save}
+        className="mt-6 rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white"
+      >
+        Save Privacy Setting
+      </button>
+
+      {saved && <p className="mt-3 text-sm">{saved}</p>}
+    </section>
+  );
+}
+
+====================================================================
+FILE: app/settings/concierge/page.tsx
+====================================================================
+
+import { requireUser } from "@/lib/auth";
+import { ConciergeSettingsForm } from "@/components/concierge/ConciergeSettingsForm";
+
+export default async function ConciergeSettingsPage() {
+  await requireUser();
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10">
+      <div className="mx-auto max-w-3xl">
+        <h1 className="text-3xl font-black">Concierge Settings</h1>
+        <p className="mt-2 text-slate-600">
+          Control whether staff-assisted introductions may be sent to you.
+        </p>
+
+        <div className="mt-8">
+          <ConciergeSettingsForm />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+====================================================================
+FILE: components/concierge/ConciergeTimeline.tsx
+====================================================================
+
+type TimelineEvent = {
+  title: string;
+  description?: string | null;
+  date?: string | Date | null;
+  complete: boolean;
+};
+
+export function ConciergeTimeline({
+  events,
+}: {
+  events: TimelineEvent[];
+}) {
+  return (
+    <ol className="space-y-4">
+      {events.map((event, index) => (
+        <li key={`${event.title}-${index}`} className="flex gap-4">
+          <div
+            className={
+              "mt-1 h-4 w-4 rounded-full " +
+              (event.complete ? "bg-emerald-500" : "bg-slate-300")
+            }
+          />
+          <div>
+            <div className="font-semibold">{event.title}</div>
+            {event.description && (
+              <p className="text-sm text-slate-600">
+                {event.description}
+              </p>
+            )}
+            {event.date && (
+              <time className="text-xs text-slate-500">
+                {new Date(event.date).toLocaleString()}
+              </time>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+====================================================================
+FILE: components/concierge/ConciergeMessageComposer.tsx
+====================================================================
+
+"use client";
+
+import { FormEvent, useState } from "react";
+
+export function ConciergeMessageComposer({
+  requestId,
+}: {
+  requestId: string;
+}) {
+  const [content, setContent] = useState("");
+  const [result, setResult] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setResult("");
+
+    const response = await fetch(
+      `/api/concierge/requests/${requestId}/messages`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setResult(data.error ?? "Message failed.");
+      return;
+    }
+
+    setContent("");
+    setResult("Message sent.");
+    window.location.reload();
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-2xl border p-4">
+      <textarea
+        value={content}
+        onChange={(event) => setContent(event.target.value)}
+        maxLength={500}
+        rows={4}
+        placeholder="Write a respectful in-platform message."
+        className="w-full rounded-xl border p-3"
+      />
+
+      <div className="mt-2 flex items-center justify-between">
+        <span className="text-xs text-slate-500">
+          {content.length}/500
+        </span>
+
+        <button
+          type="submit"
+          className="rounded-xl bg-pink-500 px-4 py-2 font-semibold text-white"
+        >
+          Send
+        </button>
+      </div>
+
+      {result && <p className="mt-2 text-sm">{result}</p>}
+    </form>
+  );
+}
+
+====================================================================
+FILE: app/concierge/[id]/page.tsx
+====================================================================
+
+import { notFound } from "next/navigation";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { ConciergeTimeline } from "@/components/concierge/ConciergeTimeline";
+import { ConciergeMessageComposer } from "@/components/concierge/ConciergeMessageComposer";
+import { RecipientDecisionCard } from "@/components/concierge/RecipientDecisionCard";
+
+export default async function ConciergeDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const user = await requireUser();
+  const { id } = await params;
+
+  const request = await prisma.conciergeRequest.findFirst({
+    where: {
+      id,
+      OR: [
+        { requesterId: user.id },
+        { recipientId: user.id },
+        ...(user.role !== "USER" ? [{}] : []),
+      ],
+    },
+    include: {
+      requester: { select: { id: true, name: true, image: true } },
+      recipient: { select: { id: true, name: true, image: true } },
+      messages: {
+        where: user.role === "USER" ? { internal: false } : undefined,
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  if (!request) notFound();
+
+  const isRecipient = request.recipientId === user.id;
+
+  const events = [
+    {
+      title: "Request submitted",
+      date: request.createdAt,
+      complete: true,
+    },
+    {
+      title: "Staff review",
+      date:
+        request.status !== "PENDING_REVIEW"
+          ? request.updatedAt
+          : null,
+      complete: request.status !== "PENDING_REVIEW",
+    },
+    {
+      title: "Outreach sent",
+      date: request.outreachSentAt,
+      complete: Boolean(request.outreachSentAt),
+    },
+    {
+      title: "Recipient response",
+      date: request.respondedAt,
+      complete: Boolean(request.respondedAt),
+    },
+  ];
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10">
+      <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1fr_360px]">
+        <section className="rounded-3xl border bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-black">
+            Concierge Request
+          </h1>
+
+          <p className="mt-2 text-sm text-slate-500">
+            Status: {request.status.replaceAll("_", " ")}
+          </p>
+
+          <div className="mt-6 space-y-4">
+            {request.messages.map((message) => (
+              <div
+                key={message.id}
+                className="rounded-2xl bg-slate-50 p-4"
+              >
+                <div className="text-xs font-semibold uppercase text-slate-500">
+                  {message.senderRole}
+                </div>
+                <p className="mt-1">{message.content}</p>
+                <time className="mt-2 block text-xs text-slate-500">
+                  {message.createdAt.toLocaleString()}
+                </time>
+              </div>
+            ))}
+          </div>
+
+          {isRecipient &&
+            request.status === "OUTREACH_SENT" &&
+            request.staffMessage && (
+              <div className="mt-6">
+                <RecipientDecisionCard
+                  requestId={request.id}
+                  staffMessage={request.staffMessage}
+                />
+              </div>
+            )}
+
+          {request.status === "RECIPIENT_INTERESTED" && (
+            <div className="mt-6">
+              <ConciergeMessageComposer requestId={request.id} />
+            </div>
+          )}
+        </section>
+
+        <aside className="rounded-3xl border bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-bold">Progress</h2>
+          <div className="mt-5">
+            <ConciergeTimeline events={events} />
+          </div>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
+====================================================================
+FILE: components/admin/ConciergeOperationsForm.tsx
+====================================================================
+
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Settings = {
+  staffSlaHours: number;
+  outreachSlaHours: number;
+  maxStaffActiveCases: number;
+  autoAssignEnabled: boolean;
+  allowCustomStaffMessage: boolean;
+  requireRecipientProfileActive: boolean;
+  requirePriorMessage: boolean;
+  minPriorMessages: number;
+};
+
+const defaultSettings: Settings = {
+  staffSlaHours: 24,
+  outreachSlaHours: 48,
+  maxStaffActiveCases: 25,
+  autoAssignEnabled: true,
+  allowCustomStaffMessage: false,
+  requireRecipientProfileActive: true,
+  requirePriorMessage: true,
+  minPriorMessages: 1,
+};
+
+export function ConciergeOperationsForm() {
+  const [settings, setSettings] =
+    useState<Settings>(defaultSettings);
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    fetch("/api/admin/concierge-settings")
+      .then((response) => response.json())
+      .then(setSettings);
+  }, []);
+
+  async function save() {
+    const response = await fetch(
+      "/api/admin/concierge-settings",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      }
+    );
+
+    const data = await response.json();
+    setStatus(response.ok ? "Settings saved." : data.error);
+  }
+
+  return (
+    <section className="rounded-3xl bg-white p-6">
+      <h2 className="text-2xl font-bold">Operational Controls</h2>
+
+      <div className="mt-6 grid gap-5 md:grid-cols-2">
+        <label>
+          <span className="text-sm font-semibold">
+            Staff review SLA hours
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={168}
+            value={settings.staffSlaHours}
+            onChange={(event) =>
+              setSettings({
+                ...settings,
+                staffSlaHours: Number(event.target.value),
+              })
+            }
+            className="mt-2 w-full rounded-xl border p-3"
+          />
+        </label>
+
+        <label>
+          <span className="text-sm font-semibold">
+            Outreach SLA hours
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={336}
+            value={settings.outreachSlaHours}
+            onChange={(event) =>
+              setSettings({
+                ...settings,
+                outreachSlaHours: Number(event.target.value),
+              })
+            }
+            className="mt-2 w-full rounded-xl border p-3"
+          />
+        </label>
+
+        <label>
+          <span className="text-sm font-semibold">
+            Maximum active cases per staff
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={500}
+            value={settings.maxStaffActiveCases}
+            onChange={(event) =>
+              setSettings({
+                ...settings,
+                maxStaffActiveCases: Number(event.target.value),
+              })
+            }
+            className="mt-2 w-full rounded-xl border p-3"
+          />
+        </label>
+
+        <label>
+          <span className="text-sm font-semibold">
+            Minimum prior messages
+          </span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={settings.minPriorMessages}
+            onChange={(event) =>
+              setSettings({
+                ...settings,
+                minPriorMessages: Number(event.target.value),
+              })
+            }
+            className="mt-2 w-full rounded-xl border p-3"
+          />
+        </label>
+      </div>
+
+      <div className="mt-6 space-y-3">
+        {[
+          ["autoAssignEnabled", "Automatically assign staff"],
+          [
+            "allowCustomStaffMessage",
+            "Allow custom staff outreach messages",
+          ],
+          [
+            "requireRecipientProfileActive",
+            "Require active recipient profile",
+          ],
+          [
+            "requirePriorMessage",
+            "Require prior in-platform message history",
+          ],
+        ].map(([key, label]) => (
+          <label key={key} className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={Boolean(settings[key as keyof Settings])}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  [key]: event.target.checked,
+                })
+              }
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+
+      <button
+        onClick={save}
+        className="mt-6 rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white"
+      >
+        Save Operational Settings
+      </button>
+
+      {status && <p className="mt-3 text-sm">{status}</p>}
+    </section>
+  );
+}
+
+====================================================================
+FILE: app/admin/concierge/settings/page.tsx
+====================================================================
+
+import { requireRole } from "@/lib/auth";
+import { ConciergeOperationsForm } from "@/components/admin/ConciergeOperationsForm";
+
+export default async function AdminConciergeSettingsPage() {
+  await requireRole(["ADMIN"]);
+
+  return (
+    <main className="min-h-screen bg-slate-100 px-4 py-10">
+      <div className="mx-auto max-w-5xl">
+        <h1 className="text-4xl font-black">
+          Concierge Operations Settings
+        </h1>
+
+        <p className="mt-3 text-slate-600">
+          Configure workload, timing, recipient eligibility, and staff
+          outreach controls.
+        </p>
+
+        <div className="mt-8">
+          <ConciergeOperationsForm />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+====================================================================
+FILE: vitest.config.ts
+====================================================================
+
+import { defineConfig } from "vitest/config";
+import path from "node:path";
+
+export default defineConfig({
+  test: {
+    environment: "node",
+    globals: true,
+    setupFiles: [],
+  },
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "."),
+    },
+  },
+});
+
+====================================================================
+FILE: tests/unit/moderation.test.ts
+====================================================================
+
+import { describe, expect, it } from "vitest";
+import { moderateConciergeText } from "@/lib/moderation";
+
+describe("moderateConciergeText", () => {
+  it("allows a respectful message", () => {
+    const result = moderateConciergeText(
+      "I enjoyed our conversation and would be happy to reconnect."
+    );
+
+    expect(result.allowed).toBe(true);
+    expect(result.decision).toBe("ALLOW");
+  });
+
+  it("rejects phone numbers", () => {
+    const result = moderateConciergeText(
+      "Please ask her to call me at 301-555-1212."
+    );
+
+    expect(result.allowed).toBe(false);
+    expect(result.matchedRules).toContain("OFF_PLATFORM_PHONE");
+  });
+
+  it("rejects coercive language", () => {
+    const result = moderateConciergeText(
+      "Make her reply because she owes me an answer."
+    );
+
+    expect(result.allowed).toBe(false);
+    expect(result.matchedRules).toContain("COERCION");
+  });
+
+  it("routes anger language to review", () => {
+    const result = moderateConciergeText(
+      "I feel ignored and would like a respectful introduction."
+    );
+
+    expect(result.allowed).toBe(true);
+    expect(result.decision).toBe("REVIEW");
+  });
+});
+
+====================================================================
+FILE: tests/unit/staff-assignment.test.ts
+====================================================================
+
+import { describe, expect, it } from "vitest";
+
+function selectLeastLoadedStaff(
+  staff: Array<{ id: string; activeCases: number }>,
+  maxCases: number
+) {
+  return staff
+    .filter((item) => item.activeCases < maxCases)
+    .sort((a, b) => a.activeCases - b.activeCases)[0] ?? null;
+}
+
+describe("staff assignment", () => {
+  it("selects the least-loaded eligible staff member", () => {
+    const result = selectLeastLoadedStaff(
+      [
+        { id: "staff-a", activeCases: 5 },
+        { id: "staff-b", activeCases: 2 },
+        { id: "staff-c", activeCases: 8 },
+      ],
+      10
+    );
+
+    expect(result?.id).toBe("staff-b");
+  });
+
+  it("returns null when all staff are at capacity", () => {
+    const result = selectLeastLoadedStaff(
+      [
+        { id: "staff-a", activeCases: 10 },
+        { id: "staff-b", activeCases: 12 },
+      ],
+      10
+    );
+
+    expect(result).toBeNull();
+  });
+});
+
+====================================================================
+FILE: playwright.config.ts
+====================================================================
+
+import { defineConfig, devices } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./tests/e2e",
+  fullyParallel: false,
+  retries: process.env.CI ? 2 : 0,
+  reporter: "html",
+  use: {
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+    trace: "on-first-retry",
+  },
+  webServer: {
+    command: "npm run dev",
+    url: "http://localhost:3000",
+    reuseExistingServer: !process.env.CI,
+  },
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+    },
+  ],
+});
+
+====================================================================
+FILE: tests/e2e/concierge.spec.ts
+====================================================================
+
+import { test, expect } from "@playwright/test";
+
+test.describe("concierge module", () => {
+  test.skip(
+    true,
+    "Connect this test to seeded authenticated test accounts before enabling."
+  );
+
+  test("member can view concierge dashboard", async ({ page }) => {
+    await page.goto("/concierge");
+    await expect(
+      page.getByRole("heading", { name: "VIP Match Concierge" })
+    ).toBeVisible();
+  });
+
+  test("recipient can opt out", async ({ page }) => {
+    await page.goto("/settings/concierge");
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Save Privacy Setting" }).click();
+    await expect(page.getByText("Settings saved.")).toBeVisible();
+  });
+});
+
+====================================================================
+FILE: docker-compose.local.yml
+====================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: datebuk
+    ports:
+      - "5432:5432"
+    volumes:
+      - datebuk_postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - datebuk_redis:/data
+
+volumes:
+  datebuk_postgres:
+  datebuk_redis:
+
+====================================================================
+UPDATED SEED ADDITIONS
+====================================================================
+
+Add to prisma/seed.ts:
+
+import { FeatureFlagKey } from "@prisma/client";
+
+const featureFlags = Object.values(FeatureFlagKey).map((key) => ({
+  key,
+  enabled:
+    key === "BACKGROUND_CHECK_ENABLED"
+      ? false
+      : true,
+  description: `Operational feature flag for ${key}`,
+}));
+
+for (const flag of featureFlags) {
+  await prisma.featureFlag.upsert({
+    where: { key: flag.key },
+    update: flag,
+    create: flag,
+  });
+}
+
+const operationalSettings = [
+  ["concierge.staffSlaHours", 24],
+  ["concierge.outreachSlaHours", 48],
+  ["concierge.maxStaffActiveCases", 25],
+  ["concierge.autoAssignEnabled", true],
+  ["concierge.allowCustomStaffMessage", false],
+  ["concierge.requireRecipientProfileActive", true],
+  ["concierge.requirePriorMessage", true],
+  ["concierge.minPriorMessages", 1],
+] as const;
+
+for (const [key, value] of operationalSettings) {
+  await prisma.operationalSetting.upsert({
+    where: { key },
+    update: { valueJson: value },
+    create: {
+      key,
+      valueJson: value,
+    },
+  });
+}
+
+====================================================================
+FULL ENACTMENT RUN COMMANDS
+====================================================================
+
+1. Start local infrastructure:
+
+docker compose -f docker-compose.local.yml up -d
+
+2. Install packages:
+
+npm install
+
+3. Copy environment:
+
+copy .env.example .env
+
+4. Generate Prisma client:
+
+npx prisma generate
+
+5. Create migration:
+
+npx prisma migrate dev --name concierge_full_enactment
+
+6. Seed data:
+
+npx tsx prisma/seed.ts
+
+7. Start Next.js:
+
+npm run dev
+
+8. Start worker in a second terminal:
+
+npm run worker:dev
+
+9. Start Stripe forwarding in a third terminal:
+
+stripe listen --forward-to localhost:3000/api/payments/webhook
+
+10. Synchronize products from PostgreSQL to Stripe:
+
+POST http://localhost:3000/api/admin/stripe-sync
+
+or create:
+
+scripts/sync-stripe.ts
+
+import { syncServiceCatalogToStripe } from "@/lib/stripe-sync";
+
+syncServiceCatalogToStripe()
+  .then((result) => {
+    console.log(`Synced ${result.length} services.`);
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+
+Then run:
+
+npm run stripe:sync
+
+11. Run tests:
+
+npm test
+npm run test:e2e
+
+====================================================================
+CRON SCHEDULE RECOMMENDATIONS
+====================================================================
+
+Every 5 minutes:
+POST /api/cron/assign-staff
+
+Every 15 minutes:
+POST /api/cron/retry-notifications
+
+Every 15 minutes:
+POST /api/cron/reconcile-payments
+
+Every hour:
+POST /api/cron/expire-concierge
+
+Every day:
+Queue analytics job:
+analyticsQueue.add("daily-snapshot", {})
+
+Always send:
+
+Authorization: Bearer YOUR_CRON_SECRET
+
+====================================================================
+STAFF STANDARD OPERATING PROCEDURE
+====================================================================
+
+1. Review requester eligibility and moderation result.
+2. Confirm neither member blocked or reported the other.
+3. Confirm recipient did not opt out.
+4. Confirm pair cooldown is satisfied.
+5. Confirm message is respectful and contains no personal contact details.
+6. Approve only a neutral, one-time introduction.
+7. Do not reveal whether the recipient read prior messages.
+8. Do not reveal last-active information.
+9. Do not state or imply recipient interest.
+10. Send the standard neutral outreach template.
+11. Close immediately on decline, block, report, or opt-out.
+12. Escalate threats, coercion, fraud, stalking indicators, or repeated abuse.
+13. Never communicate with the recipient outside approved platform channels.
+14. Never manually override blocks or opt-outs.
+15. Record internal notes without unnecessary personal data.
+
+STANDARD OUTREACH TEMPLATE
+
+Hello,
+
+A DateBuk member has requested a one-time concierge introduction because
+they would like an opportunity to reconnect or introduce themselves.
+
+There is no obligation to respond. You may view the request, accept,
+decline, block, report, or opt out of future concierge introductions.
+
+DateBuk will not share your private activity information or personal
+contact details.
+
+====================================================================
+REFUND RULES
+====================================================================
+
+RETURN ONE CREDIT WHEN:
+- Staff rejects before outreach.
+- User cancels while still pending review.
+- Technical failure prevents outreach.
+- Recipient was already opted out and the request passed due to stale data.
+- Duplicate credit consumption occurred.
+
+DO NOT RETURN A CREDIT WHEN:
+- Recipient declines.
+- Recipient ignores the request.
+- Recipient selects maybe later.
+- Recipient blocks after outreach.
+- Recipient reports after outreach, unless staff policy determines the
+  requester should never have passed review.
+
+REFUND MONEY WHEN:
+- Duplicate payment.
+- Service package was never delivered due to platform fault.
+- Legally required.
+- Admin-approved goodwill exception.
+
+====================================================================
+PRODUCTION READINESS CHECKLIST
+====================================================================
+
+AUTHENTICATION
+[ ] Credentials login works.
+[ ] Google/Microsoft providers configured only when secrets exist.
+[ ] Role and membership are loaded from PostgreSQL.
+[ ] Suspended users cannot sign in.
+[ ] Every API route checks server-side authorization.
+
+DATABASE
+[ ] Migration applied in staging.
+[ ] Backup and restore tested.
+[ ] Unique constraints prevent duplicate wallets and Stripe links.
+[ ] Transaction rollback tested.
+[ ] Audit retention policy documented.
+
+REDIS AND WORKERS
+[ ] Redis is persistent and secured.
+[ ] Worker process runs separately from Next.js.
+[ ] Failed jobs are visible and retryable.
+[ ] Distributed locks prevent duplicate pair requests.
+[ ] Rate limiting works across multiple application instances.
+
+PAYMENTS
+[ ] Stripe webhook signature verified.
+[ ] Duplicate webhook delivery is idempotent.
+[ ] Stripe products/prices synchronized.
+[ ] Credits are added exactly once.
+[ ] Refund and dispute process documented.
+[ ] Tax obligations reviewed.
+
+NOTIFICATIONS
+[ ] Resend domain verified.
+[ ] Bounce and complaint webhooks verified.
+[ ] Failed deliveries retry.
+[ ] Users receive in-app notifications even when email fails.
+[ ] Email content never exposes sensitive activity data.
+
+SAFETY
+[ ] Recipient opt-out works immediately.
+[ ] Blocks and reports prevent future requests.
+[ ] Moderation rejects contact details, threats, coercion, and payment offers.
+[ ] Staff cannot bypass opt-out.
+[ ] Appeals do not automatically restore credits or outreach.
+[ ] Background checks remain disabled until approved vendor/legal review.
+
+STAFF
+[ ] Staff assigned automatically or manually.
+[ ] Staff workload capacity enforced.
+[ ] Review and outreach SLAs monitored.
+[ ] Standard outreach template used.
+[ ] Escalation procedure documented.
+[ ] Staff actions audited.
+
+ADMIN
+[ ] Feature flags can disable purchases, requests, or outreach independently.
+[ ] Operational settings editable.
+[ ] Stripe sync is admin-only.
+[ ] Audit export is admin-only.
+[ ] Revenue and case metrics reconcile with Stripe.
+
+TESTING
+[ ] Unit tests pass.
+[ ] Integration tests use a disposable database.
+[ ] E2E tests use seeded test users.
+[ ] Payment webhook tests cover duplicate events.
+[ ] Security tests cover role bypass attempts.
+[ ] Load tests cover staff queue and notification jobs.
+
+DEPLOYMENT
+[ ] PostgreSQL production URL configured.
+[ ] Redis production URL configured.
+[ ] Worker deployed.
+[ ] Cron jobs configured.
+[ ] Secrets stored in platform secret manager.
+[ ] HTTPS enforced.
+[ ] CSP and secure headers configured.
+[ ] Monitoring alerts configured.
+[ ] Rollback plan documented.
+
+====================================================================
+WHAT THIS PACK COMPLETES
+====================================================================
+
+After this pack is wired, the concierge system supports:
+
+- Real authentication and server-side role checks.
+- Elite/Premium purchase authorization.
+- $20 package for two credits.
+- Stripe catalog synchronization.
+- Secure and idempotent credit fulfillment.
+- Moderated request creation.
+- Distributed anti-duplicate locking.
+- Automatic staff assignment.
+- Staff capacity limits.
+- Background job execution.
+- Recipient privacy and opt-out.
+- Staff-reviewed one-time outreach.
+- Recipient decision workflow.
+- Post-interest in-platform messaging.
+- Cancellation and appeal handling.
+- Email delivery and retry.
+- Notification delivery tracking.
+- Feature flags.
+- Operational settings.
+- Audit export.
+- Payment reconciliation.
+- Health monitoring.
+- Automated tests.
+- Deployment and SOP guidance.
+
+====================================================================
+END OF FULL ENACTMENT PACK 2
+====================================================================

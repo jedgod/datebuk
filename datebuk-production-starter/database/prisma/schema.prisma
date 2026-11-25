@@ -1,0 +1,54 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+enum Role { USER ADMIN MODERATOR }
+enum TicketStatus { OPEN PENDING RESOLVED CLOSED }
+enum VerificationStatus { NOT_STARTED PENDING VERIFIED REJECTED }
+
+model User {
+  id String @id @default(uuid())
+  fullName String
+  email String @unique
+  passwordHash String
+  role Role @default(USER)
+  verificationStatus VerificationStatus @default(NOT_STARTED)
+  createdAt DateTime @default(now())
+  profile Profile?
+  tickets Ticket[]
+}
+
+model Profile {
+  id String @id @default(uuid())
+  userId String @unique
+  bio String?
+  relationshipGoal String?
+  city String?
+  country String?
+  interests String[] @default([])
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Ticket {
+  id String @id @default(uuid())
+  userId String?
+  name String
+  email String
+  issueType String
+  message String
+  attachmentUrl String?
+  status TicketStatus @default(OPEN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model MatchProfile {
+  id String @id @default(uuid())
+  displayName String
+  age Int?
+  city String?
+  matchScore Int @default(0)
+  photoUrl String?
+  online Boolean @default(false)
+  createdAt DateTime @default(now())
+}

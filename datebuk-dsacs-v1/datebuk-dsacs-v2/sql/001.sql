@@ -1,0 +1,10 @@
+BEGIN;
+CREATE SCHEMA IF NOT EXISTS dsacs;
+CREATE TABLE dsacs.accounts(user_id text PRIMARY KEY, stripe_customer text UNIQUE, subscription_id text UNIQUE, plan text NOT NULL DEFAULT 'free' CHECK(plan IN ('free','premium','elite')), status text NOT NULL DEFAULT 'inactive', period_end timestamptz, updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE dsacs.usage(user_id text NOT NULL, feature text NOT NULL, day date NOT NULL, count bigint NOT NULL CHECK(count>=0), PRIMARY KEY(user_id,feature,day));
+CREATE TABLE dsacs.operations(user_id text NOT NULL, request_id uuid NOT NULL, feature text NOT NULL, result jsonb NOT NULL, PRIMARY KEY(user_id,request_id));
+CREATE TABLE dsacs.events(id text PRIMARY KEY, received_at timestamptz DEFAULT now());
+CREATE TABLE dsacs.audit(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, actor text NOT NULL, action text NOT NULL, target text NOT NULL, details jsonb NOT NULL DEFAULT '{}', created_at timestamptz NOT NULL DEFAULT now());
+CREATE FUNCTION dsacs.immutable() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'append only'; END $$;
+CREATE TRIGGER audit_immutable BEFORE UPDATE OR DELETE ON dsacs.audit FOR EACH ROW EXECUTE FUNCTION dsacs.immutable();
+COMMIT;

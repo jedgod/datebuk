@@ -1,0 +1,75 @@
+{
+  "expo": {
+    "name": "DateBuk",
+    "slug": "datebuk",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/datebuk_logo.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#EC4899",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#EC4899"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.datebuk.app",
+      "entitlements": {
+        "aps-environment": "production"
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "DateBuk uses your camera for video calls and to scan your ID and take a selfie for identity verification.",
+        "NSMicrophoneUsageDescription": "DateBuk uses your microphone for voice and video calls.",
+        "UIBackgroundModes": [
+          "audio",
+          "voip",
+          "remote-notification"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/datebuk_logo.png",
+        "backgroundColor": "#EC4899"
+      },
+      "package": "com.datebuk.app",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "FOREGROUND_SERVICE_CAMERA",
+        "BLUETOOTH_CONNECT"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "datebuk",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#7C3AED"
+        }
+      ],
+      "./plugins/withCallPermissions",
+      "expo-audio",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow DateBuk to capture photos for your profile and to scan your ID and take a selfie for identity verification."
+        }
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "datebuk-mobile"
+      }
+    }
+  }
+}

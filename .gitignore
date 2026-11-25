@@ -1,0 +1,80 @@
+node_modules
+dist
+.next
+.next-portal
+.env
+.env.local
+.DS_Store
+*.log
+*.tsbuildinfo
+.data/
+
+# Production credentials and signing material
+.env.production
+.env.*.production
+login Credential.txt
+*Credential*.txt
+secrets/**
+!secrets/.gitkeep
+!secrets/README.md
+**/google-services.json
+**/GoogleService-Info.plist
+**/AuthKey*.p8
+**/*.keystore
+**/*.jks
+**/*.p12
+**/*.mobileprovision
+apps/mobile/android/keystore.properties
+infra/coturn/turnserver.conf
+infra/coturn/certs/
+firebase-service-account*.json
+service-account*.json
+
+# ---------------------------------------------------------------------------------------
+# Withheld from the public repository (kept locally). Remove a line to publish that path.
+# ---------------------------------------------------------------------------------------
+# Tooling caches / agent working folders
+.turbo/
+.codex-*/
+# Photos of real people used as demo imagery (likeness/consent) - 160+ files, ~200 MB
+malepic-dbuk/
+pic2datebukladies/
+apps/web/public/pic2datebukladies/
+# Superseded pack iterations (duplicate code; their seeds/READMEs contain login credentials)
+datebuk-enterprise-packs-1-to-5/
+datebuk-pack1-pack2/
+# Files with hard-coded logins / real-looking test accounts
+login.json
+test-login.json
+test-login.js
+test-admin-login.js
+test-admin-login-cookies.js
+test-full-login-flow.js
+login-test.html
+ADMIN_TEST_PAGE.html
+installation.txt
+LOGIN_FIX_STARTUP_GUIDE.md
+LOGIN_FIX_SUMMARY.md
+LOGIN_ISSUE_RESOLVED.md
+SEPARATE_PORTS_SETUP.md
+SEPARATE_PORTS_SUMMARY.md
+STAFF_MANAGEMENT_SYSTEM.md
+STAFF_SYSTEM_ACTIVATION_COMPLETE.md
+apps/api/create-star-frank.ts
+apps/api/seed.ts
+# Security assessments (they describe weaknesses; do not publish)
+AssessEvals-Copilot.txt
+security-file-report_2026.txt
+ultra_datebuk-08-01-2026.txt
+AdminSecurityMeasures.txt
+*DIAGNOSIS*.md
+# Scratch notes / captured responses
+response.txt
+test.json
+DataSite.txt
+Query Command.txt
+future works.txt
+launching.txt
+settingsMobileApp.txt
+datebukdiag.txt
+apps/api/test-user.ts

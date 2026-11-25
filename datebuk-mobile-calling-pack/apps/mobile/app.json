@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "DateBuk",
+    "slug": "datebuk-mobile-calling",
+    "scheme": "datebuk",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "plugins": [
+      ["expo-notifications", {"icon":"./assets/notification-icon.png","color":"#7C3AED"}],
+      ["./plugins/withCallPermissions"]
+    ],
+    "android": {
+      "package": "com.datebuk.app",
+      "permissions": ["CAMERA","RECORD_AUDIO","POST_NOTIFICATIONS","FOREGROUND_SERVICE","FOREGROUND_SERVICE_MICROPHONE","FOREGROUND_SERVICE_CAMERA","BLUETOOTH_CONNECT"]
+    },
+    "ios": {
+      "bundleIdentifier": "com.datebuk.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "DateBuk uses your camera for video calls.",
+        "NSMicrophoneUsageDescription": "DateBuk uses your microphone for voice and video calls.",
+        "UIBackgroundModes": ["audio","voip","remote-notification"]
+      }
+    }
+  }
+}

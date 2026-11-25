@@ -1,0 +1,3454 @@
+
+DATEBUK CONCIERGE & PREMIUM SERVICES MODULE
+===========================================
+
+A production-oriented full-stack module for:
+- Match Concierge outreach: $20 for 2 requests
+- Profile review
+- Profile optimization
+- Photo review
+- Background-check request intake
+- Date-planning assistance
+- Relationship-coaching booking
+- Priority support
+- User, Staff, and Admin dashboards
+- Stripe checkout and webhook handling
+- PostgreSQL + Prisma
+- Consent, blocking, reporting, quotas, audit logs, and anti-harassment safeguards
+
+STACK
+-----
+- Next.js 15+ App Router
+- TypeScript
+- PostgreSQL
+- Prisma ORM
+- NextAuth/Auth.js-compatible session hooks
+- Stripe
+- Zod validation
+- Tailwind CSS
+
+IMPORTANT
+---------
+This pack intentionally excludes live Stripe secrets, database credentials,
+email/SMS provider credentials, and identity-verification vendor credentials.
+Provide them through environment variables.
+
+====================================================================
+PROJECT STRUCTURE
+====================================================================
+
+datebuk-concierge/
+├─ app/
+│  ├─ api/
+│  │  ├─ concierge/
+│  │  │  ├─ requests/route.ts
+│  │  │  ├─ requests/[id]/route.ts
+│  │  │  ├─ requests/[id]/respond/route.ts
+│  │  │  ├─ requests/[id]/staff-action/route.ts
+│  │  │  ├─ credits/route.ts
+│  │  │  └─ eligibility/[recipientId]/route.ts
+│  │  ├─ services/
+│  │  │  ├─ catalog/route.ts
+│  │  │  ├─ orders/route.ts
+│  │  │  └─ orders/[id]/route.ts
+│  │  ├─ payments/
+│  │  │  ├─ checkout/route.ts
+│  │  │  └─ webhook/route.ts
+│  │  ├─ staff/
+│  │  │  ├─ concierge/route.ts
+│  │  │  ├─ service-orders/route.ts
+│  │  │  └─ analytics/route.ts
+│  │  └─ admin/
+│  │     └─ service-catalog/route.ts
+│  ├─ concierge/
+│  │  ├─ page.tsx
+│  │  ├─ new/[recipientId]/page.tsx
+│  │  └─ requests/page.tsx
+│  ├─ premium-services/page.tsx
+│  ├─ staff/concierge/page.tsx
+│  └─ admin/concierge/page.tsx
+├─ components/
+│  ├─ concierge/
+│  │  ├─ ConciergePurchaseCard.tsx
+│  │  ├─ ConciergeRequestForm.tsx
+│  │  ├─ ConciergeRequestList.tsx
+│  │  ├─ RecipientDecisionCard.tsx
+│  │  └─ StaffConciergeQueue.tsx
+│  └─ premium-services/
+│     ├─ ServiceCatalog.tsx
+│     └─ ServiceOrderForm.tsx
+├─ lib/
+│  ├─ auth.ts
+│  ├─ prisma.ts
+│  ├─ stripe.ts
+│  ├─ permissions.ts
+│  ├─ concierge-policy.ts
+│  ├─ audit.ts
+│  ├─ notifications.ts
+│  ├─ rate-limit.ts
+│  └─ validators.ts
+├─ prisma/
+│  ├─ schema.prisma
+│  └─ seed.ts
+├─ middleware.ts
+├─ package.json
+├─ .env.example
+└─ README.md
+
+====================================================================
+FILE: package.json
+====================================================================
+
+{
+  "name": "datebuk-concierge",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.11.1",
+    "next": "^15.3.4",
+    "next-auth": "^5.0.0-beta.28",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "stripe": "^18.2.1",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.32",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "prisma": "^6.11.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}
+
+====================================================================
+FILE: .env.example
+====================================================================
+
+DATABASE_URL="postgresql://postgres:password@localhost:5432/datebuk?schema=public"
+
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="replace-with-a-long-random-secret"
+
+STRIPE_SECRET_KEY="sk_test_replace"
+STRIPE_WEBHOOK_SECRET="whsec_replace"
+
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+
+EMAIL_FROM="concierge@datebuk.example"
+SUPPORT_EMAIL="support@datebuk.example"
+
+CONCIERGE_PACKAGE_PRICE_CENTS="2000"
+CONCIERGE_PACKAGE_CREDITS="2"
+CONCIERGE_COOLDOWN_DAYS="30"
+CONCIERGE_REQUEST_EXPIRY_DAYS="7"
+CONCIERGE_MONTHLY_LIMIT_ELITE="10"
+CONCIERGE_MONTHLY_LIMIT_PREMIUM="20"
+
+====================================================================
+FILE: prisma/schema.prisma
+====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  STAFF
+  ADMIN
+}
+
+enum MembershipTier {
+  FREE
+  ELITE
+  PREMIUM
+}
+
+enum ConciergeRequestStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  OUTREACH_SENT
+  RECIPIENT_INTERESTED
+  RECIPIENT_DECLINED
+  EXPIRED
+  CANCELLED
+  CLOSED
+}
+
+enum ConciergeResponseType {
+  INTERESTED
+  REPLY_NOW
+  MAYBE_LATER
+  NOT_INTERESTED
+  BLOCK_REQUESTER
+  OPT_OUT
+  REPORT
+}
+
+enum ServiceOrderStatus {
+  PENDING_PAYMENT
+  PAID
+  ASSIGNED
+  IN_PROGRESS
+  AWAITING_MEMBER
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum ServiceType {
+  CONCIERGE_OUTREACH_PACKAGE
+  PROFILE_REVIEW
+  PROFILE_OPTIMIZATION
+  PHOTO_REVIEW
+  BACKGROUND_CHECK_REQUEST
+  DATE_PLANNING
+  RELATIONSHIP_COACHING
+  PRIORITY_SUPPORT
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum NotificationType {
+  CONCIERGE_SUBMITTED
+  CONCIERGE_APPROVED
+  CONCIERGE_REJECTED
+  CONCIERGE_OUTREACH_SENT
+  CONCIERGE_RESPONSE_RECEIVED
+  SERVICE_ORDER_UPDATE
+  PAYMENT_RECEIPT
+  STAFF_ASSIGNMENT
+  SAFETY_ALERT
+}
+
+model User {
+  id                       String              @id @default(cuid())
+  email                    String              @unique
+  name                     String?
+  image                    String?
+  role                     UserRole            @default(USER)
+  membershipTier           MembershipTier      @default(FREE)
+  conciergeOptOut          Boolean             @default(false)
+  isSuspended              Boolean             @default(false)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+
+  conciergeWallet          ConciergeWallet?
+  conciergeRequestsMade    ConciergeRequest[]  @relation("RequesterConciergeRequests")
+  conciergeRequestsReceived ConciergeRequest[] @relation("RecipientConciergeRequests")
+  staffConciergeActions    ConciergeRequest[]  @relation("StaffConciergeActions")
+  serviceOrders            ServiceOrder[]      @relation("MemberServiceOrders")
+  assignedServiceOrders    ServiceOrder[]      @relation("AssignedStaffServiceOrders")
+  payments                 Payment[]
+  notifications            Notification[]
+  auditEvents              AuditLog[]          @relation("ActorAuditEvents")
+  reportsMade              SafetyReport[]      @relation("ReporterSafetyReports")
+  reportsReceived          SafetyReport[]      @relation("ReportedSafetyReports")
+  blocksMade               UserBlock[]         @relation("Blocker")
+  blocksReceived           UserBlock[]         @relation("Blocked")
+}
+
+model ConciergeWallet {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  availableCredits Int      @default(0)
+  lifetimePurchased Int     @default(0)
+  lifetimeUsed      Int     @default(0)
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ConciergeRequest {
+  id                 String                  @id @default(cuid())
+  requesterId        String
+  recipientId        String
+  status             ConciergeRequestStatus @default(PENDING_REVIEW)
+  reason             String
+  requesterMessage   String
+  staffMessage       String?
+  staffNotes         String?
+  staffId            String?
+  recipientResponse  ConciergeResponseType?
+  recipientMessage   String?
+  creditConsumed     Boolean                 @default(false)
+  outreachSentAt     DateTime?
+  respondedAt        DateTime?
+  expiresAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  requester User  @relation("RequesterConciergeRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient User  @relation("RecipientConciergeRequests", fields: [recipientId], references: [id], onDelete: Cascade)
+  staff     User? @relation("StaffConciergeActions", fields: [staffId], references: [id], onDelete: SetNull)
+  messages  ConciergeMessage[]
+  auditLogs AuditLog[]
+
+  @@index([requesterId, createdAt])
+  @@index([recipientId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ConciergeMessage {
+  id         String   @id @default(cuid())
+  requestId  String
+  senderId   String?
+  senderRole UserRole
+  content    String
+  internal   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  request ConciergeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model ServiceCatalog {
+  id               String      @id @default(cuid())
+  type             ServiceType @unique
+  name             String
+  shortDescription String
+  fullDescription  String
+  priceCents       Int
+  currency         String      @default("usd")
+  includedUnits    Int?
+  active           Boolean     @default(true)
+  eliteEligible    Boolean     @default(true)
+  premiumEligible  Boolean     @default(true)
+  freeEligible     Boolean     @default(false)
+  turnaroundHours  Int?
+  sortOrder        Int         @default(0)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  orders ServiceOrder[]
+}
+
+model ServiceOrder {
+  id              String             @id @default(cuid())
+  memberId        String
+  serviceCatalogId String
+  assignedStaffId String?
+  status          ServiceOrderStatus @default(PENDING_PAYMENT)
+  intakeJson      Json?
+  deliveryJson    Json?
+  memberNotes     String?
+  staffNotes      String?
+  dueAt           DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  member        User           @relation("MemberServiceOrders", fields: [memberId], references: [id], onDelete: Cascade)
+  assignedStaff User?          @relation("AssignedStaffServiceOrders", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  service       ServiceCatalog @relation(fields: [serviceCatalogId], references: [id])
+  payments      Payment[]
+  auditLogs     AuditLog[]
+
+  @@index([memberId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  userId                String
+  serviceOrderId        String?
+  stripeCheckoutSessionId String?     @unique
+  stripePaymentIntentId String?       @unique
+  amountCents           Int
+  currency              String        @default("usd")
+  status                PaymentStatus @default(PENDING)
+  metadata              Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceOrder ServiceOrder? @relation(fields: [serviceOrderId], references: [id], onDelete: SetNull)
+}
+
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+}
+
+model SafetyReport {
+  id          String   @id @default(cuid())
+  reporterId  String
+  reportedId  String
+  category    String
+  description String?
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  reporter User @relation("ReporterSafetyReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported User @relation("ReportedSafetyReports", fields: [reportedId], references: [id], onDelete: Cascade)
+
+  @@index([reportedId, resolved])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model AuditLog {
+  id                 String   @id @default(cuid())
+  actorId            String?
+  action             String
+  entityType         String
+  entityId           String
+  metadata           Json?
+  ipAddress          String?
+  userAgent          String?
+  conciergeRequestId String?
+  serviceOrderId     String?
+  createdAt          DateTime @default(now())
+
+  actor            User?             @relation("ActorAuditEvents", fields: [actorId], references: [id], onDelete: SetNull)
+  conciergeRequest ConciergeRequest? @relation(fields: [conciergeRequestId], references: [id], onDelete: Cascade)
+  serviceOrder     ServiceOrder?      @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+
+  @@index([entityType, entityId, createdAt])
+}
+
+====================================================================
+FILE: lib/prisma.ts
+====================================================================
+
+import { PrismaClient } from "@prisma/client";
+
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+};
+
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === "development"
+      ? ["query", "warn", "error"]
+      : ["error"],
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
+
+====================================================================
+FILE: lib/auth.ts
+====================================================================
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { UserRole } from "@prisma/client";
+
+export async function requireUser() {
+  const session = await auth();
+
+  if (!session?.user?.email) {
+    throw new Error("UNAUTHORIZED");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  });
+
+  if (!user || user.isSuspended) {
+    throw new Error("UNAUTHORIZED");
+  }
+
+  return user;
+}
+
+export async function requireRole(roles: UserRole[]) {
+  const user = await requireUser();
+
+  if (!roles.includes(user.role)) {
+    throw new Error("FORBIDDEN");
+  }
+
+  return user;
+}
+
+====================================================================
+FILE: lib/permissions.ts
+====================================================================
+
+import { MembershipTier, UserRole } from "@prisma/client";
+
+export function canPurchaseConcierge(tier: MembershipTier) {
+  return tier === "ELITE" || tier === "PREMIUM";
+}
+
+export function canAccessService(
+  tier: MembershipTier,
+  service: {
+    freeEligible: boolean;
+    eliteEligible: boolean;
+    premiumEligible: boolean;
+  }
+) {
+  if (tier === "FREE") return service.freeEligible;
+  if (tier === "ELITE") return service.eliteEligible;
+  return service.premiumEligible;
+}
+
+export function isStaff(role: UserRole) {
+  return role === "STAFF" || role === "ADMIN";
+}
+
+====================================================================
+FILE: lib/validators.ts
+====================================================================
+
+import { z } from "zod";
+
+export const createConciergeRequestSchema = z.object({
+  recipientId: z.string().cuid(),
+  reason: z.enum([
+    "NO_RESPONSE",
+    "CONVERSATION_STOPPED",
+    "MISSED_CONNECTION",
+    "PROFESSIONAL_INTRODUCTION",
+  ]),
+  requesterMessage: z
+    .string()
+    .trim()
+    .min(10)
+    .max(500)
+    .refine(
+      (value) => !/(phone|whatsapp|telegram|snapchat|email me|@)/i.test(value),
+      "Do not include off-platform contact information."
+    ),
+});
+
+export const recipientResponseSchema = z.object({
+  response: z.enum([
+    "INTERESTED",
+    "REPLY_NOW",
+    "MAYBE_LATER",
+    "NOT_INTERESTED",
+    "BLOCK_REQUESTER",
+    "OPT_OUT",
+    "REPORT",
+  ]),
+  message: z.string().trim().max(500).optional(),
+});
+
+export const staffActionSchema = z.object({
+  action: z.enum([
+    "APPROVE",
+    "REJECT",
+    "SEND_OUTREACH",
+    "CLOSE",
+    "REFUND_CREDIT",
+  ]),
+  staffMessage: z.string().trim().max(1000).optional(),
+  staffNotes: z.string().trim().max(2000).optional(),
+});
+
+export const createServiceOrderSchema = z.object({
+  serviceCatalogId: z.string().cuid(),
+  intake: z.record(z.string(), z.unknown()).optional(),
+  memberNotes: z.string().trim().max(2000).optional(),
+});
+
+====================================================================
+FILE: lib/concierge-policy.ts
+====================================================================
+
+import { prisma } from "@/lib/prisma";
+import { MembershipTier } from "@prisma/client";
+
+const cooldownDays = Number(process.env.CONCIERGE_COOLDOWN_DAYS ?? 30);
+const expiryDays = Number(process.env.CONCIERGE_REQUEST_EXPIRY_DAYS ?? 7);
+
+export function conciergeExpiryDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + expiryDays);
+  return date;
+}
+
+export function monthlyLimitForTier(tier: MembershipTier) {
+  if (tier === "ELITE") {
+    return Number(process.env.CONCIERGE_MONTHLY_LIMIT_ELITE ?? 10);
+  }
+
+  if (tier === "PREMIUM") {
+    return Number(process.env.CONCIERGE_MONTHLY_LIMIT_PREMIUM ?? 20);
+  }
+
+  return 0;
+}
+
+export async function evaluateConciergeEligibility(
+  requesterId: string,
+  recipientId: string
+) {
+  if (requesterId === recipientId) {
+    return { allowed: false, code: "SELF_REQUEST" };
+  }
+
+  const [requester, recipient, wallet, directBlock, reverseBlock, unresolvedReport] =
+    await Promise.all([
+      prisma.user.findUnique({ where: { id: requesterId } }),
+      prisma.user.findUnique({ where: { id: recipientId } }),
+      prisma.conciergeWallet.findUnique({ where: { userId: requesterId } }),
+      prisma.userBlock.findUnique({
+        where: { blockerId_blockedId: { blockerId: requesterId, blockedId: recipientId } },
+      }),
+      prisma.userBlock.findUnique({
+        where: { blockerId_blockedId: { blockerId: recipientId, blockedId: requesterId } },
+      }),
+      prisma.safetyReport.findFirst({
+        where: {
+          resolved: false,
+          OR: [
+            { reporterId: requesterId, reportedId: recipientId },
+            { reporterId: recipientId, reportedId: requesterId },
+          ],
+        },
+      }),
+    ]);
+
+  if (!requester || !recipient) return { allowed: false, code: "USER_NOT_FOUND" };
+  if (requester.isSuspended || recipient.isSuspended) {
+    return { allowed: false, code: "SUSPENDED_ACCOUNT" };
+  }
+
+  if (requester.membershipTier === "FREE") {
+    return { allowed: false, code: "UPGRADE_REQUIRED" };
+  }
+
+  if (recipient.conciergeOptOut) {
+    return { allowed: false, code: "RECIPIENT_OPTED_OUT" };
+  }
+
+  if (directBlock || reverseBlock) {
+    return { allowed: false, code: "BLOCKED_RELATIONSHIP" };
+  }
+
+  if (unresolvedReport) {
+    return { allowed: false, code: "SAFETY_REVIEW_REQUIRED" };
+  }
+
+  if (!wallet || wallet.availableCredits < 1) {
+    return { allowed: false, code: "NO_CREDITS" };
+  }
+
+  const cooldownStart = new Date();
+  cooldownStart.setDate(cooldownStart.getDate() - cooldownDays);
+
+  const recentPairRequest = await prisma.conciergeRequest.findFirst({
+    where: {
+      requesterId,
+      recipientId,
+      createdAt: { gte: cooldownStart },
+      status: {
+        notIn: ["REJECTED", "CANCELLED"],
+      },
+    },
+  });
+
+  if (recentPairRequest) {
+    return { allowed: false, code: "PAIR_COOLDOWN_ACTIVE" };
+  }
+
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const monthlyCount = await prisma.conciergeRequest.count({
+    where: {
+      requesterId,
+      createdAt: { gte: monthStart },
+      status: { not: "CANCELLED" },
+    },
+  });
+
+  const limit = monthlyLimitForTier(requester.membershipTier);
+  if (monthlyCount >= limit) {
+    return { allowed: false, code: "MONTHLY_LIMIT_REACHED" };
+  }
+
+  return {
+    allowed: true,
+    code: "ELIGIBLE",
+    walletCredits: wallet.availableCredits,
+    monthlyUsed: monthlyCount,
+    monthlyLimit: limit,
+  };
+}
+
+====================================================================
+FILE: lib/audit.ts
+====================================================================
+
+import { prisma } from "@/lib/prisma";
+
+type AuditInput = {
+  actorId?: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  metadata?: Record<string, unknown>;
+  conciergeRequestId?: string;
+  serviceOrderId?: string;
+  ipAddress?: string;
+  userAgent?: string;
+};
+
+export async function writeAuditLog(input: AuditInput) {
+  return prisma.auditLog.create({
+    data: {
+      actorId: input.actorId,
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      metadata: input.metadata ?? {},
+      conciergeRequestId: input.conciergeRequestId,
+      serviceOrderId: input.serviceOrderId,
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
+    },
+  });
+}
+
+====================================================================
+FILE: lib/notifications.ts
+====================================================================
+
+import { NotificationType } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+
+export async function createNotification(input: {
+  userId: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+}) {
+  return prisma.notification.create({
+    data: {
+      userId: input.userId,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      data: input.data ?? {},
+    },
+  });
+}
+
+/*
+Replace this function with SendGrid, Resend, AWS SES, Twilio, or Firebase.
+The database notification is still created even when external delivery fails.
+*/
+export async function dispatchExternalNotification(
+  email: string,
+  subject: string,
+  body: string
+) {
+  console.info("External notification queued", { email, subject, body });
+}
+
+====================================================================
+FILE: lib/rate-limit.ts
+====================================================================
+
+const buckets = new Map<string, { count: number; resetAt: number }>();
+
+export function enforceRateLimit(
+  key: string,
+  limit = 10,
+  windowMs = 60_000
+) {
+  const now = Date.now();
+  const current = buckets.get(key);
+
+  if (!current || current.resetAt <= now) {
+    buckets.set(key, { count: 1, resetAt: now + windowMs });
+    return;
+  }
+
+  if (current.count >= limit) {
+    throw new Error("RATE_LIMITED");
+  }
+
+  current.count += 1;
+}
+
+/*
+For production across multiple servers, replace this in-memory limiter
+with Redis, Upstash, Cloudflare KV, or another shared store.
+*/
+
+====================================================================
+FILE: lib/stripe.ts
+====================================================================
+
+import Stripe from "stripe";
+
+export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2025-06-30.basil",
+  typescript: true,
+});
+
+====================================================================
+FILE: app/api/concierge/eligibility/[recipientId]/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { evaluateConciergeEligibility } from "@/lib/concierge-policy";
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ recipientId: string }> }
+) {
+  try {
+    const user = await requireUser();
+    const { recipientId } = await context.params;
+
+    const result = await evaluateConciergeEligibility(user.id, recipientId);
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 401 });
+  }
+}
+
+====================================================================
+FILE: app/api/concierge/credits/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function GET() {
+  try {
+    const user = await requireUser();
+
+    const wallet = await prisma.conciergeWallet.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: { userId: user.id },
+    });
+
+    return NextResponse.json(wallet);
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+}
+
+====================================================================
+FILE: app/api/concierge/requests/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { createConciergeRequestSchema } from "@/lib/validators";
+import {
+  conciergeExpiryDate,
+  evaluateConciergeEligibility,
+} from "@/lib/concierge-policy";
+import { writeAuditLog } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
+import { enforceRateLimit } from "@/lib/rate-limit";
+
+export async function GET() {
+  try {
+    const user = await requireUser();
+
+    const requests = await prisma.conciergeRequest.findMany({
+      where: {
+        OR: [{ requesterId: user.id }, { recipientId: user.id }],
+      },
+      include: {
+        requester: { select: { id: true, name: true, image: true } },
+        recipient: { select: { id: true, name: true, image: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json(requests);
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const user = await requireUser();
+    enforceRateLimit(`concierge-create:${user.id}`, 5, 60_000);
+
+    const body = createConciergeRequestSchema.parse(await request.json());
+    const eligibility = await evaluateConciergeEligibility(
+      user.id,
+      body.recipientId
+    );
+
+    if (!eligibility.allowed) {
+      return NextResponse.json(
+        { error: eligibility.code },
+        { status: 409 }
+      );
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const wallet = await tx.conciergeWallet.updateMany({
+        where: {
+          userId: user.id,
+          availableCredits: { gte: 1 },
+        },
+        data: {
+          availableCredits: { decrement: 1 },
+          lifetimeUsed: { increment: 1 },
+        },
+      });
+
+      if (wallet.count !== 1) {
+        throw new Error("NO_CREDITS");
+      }
+
+      return tx.conciergeRequest.create({
+        data: {
+          requesterId: user.id,
+          recipientId: body.recipientId,
+          reason: body.reason,
+          requesterMessage: body.requesterMessage,
+          creditConsumed: true,
+          expiresAt: conciergeExpiryDate(),
+          messages: {
+            create: {
+              senderId: user.id,
+              senderRole: user.role,
+              content: body.requesterMessage,
+              internal: true,
+            },
+          },
+        },
+      });
+    });
+
+    await writeAuditLog({
+      actorId: user.id,
+      action: "CONCIERGE_REQUEST_CREATED",
+      entityType: "ConciergeRequest",
+      entityId: created.id,
+      conciergeRequestId: created.id,
+      metadata: { recipientId: body.recipientId, reason: body.reason },
+    });
+
+    await createNotification({
+      userId: user.id,
+      type: "CONCIERGE_SUBMITTED",
+      title: "Concierge request submitted",
+      body: "Your request is waiting for staff review.",
+      data: { requestId: created.id },
+    });
+
+    return NextResponse.json(created, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+
+    const status =
+      message === "UNAUTHORIZED"
+        ? 401
+        : message === "RATE_LIMITED"
+        ? 429
+        : message === "NO_CREDITS"
+        ? 409
+        : 400;
+
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+====================================================================
+FILE: app/api/concierge/requests/[id]/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireUser();
+    const { id } = await context.params;
+
+    const item = await prisma.conciergeRequest.findFirst({
+      where: {
+        id,
+        OR: [
+          { requesterId: user.id },
+          { recipientId: user.id },
+          ...(user.role !== "USER" ? [{}] : []),
+        ],
+      },
+      include: {
+        requester: { select: { id: true, name: true, image: true } },
+        recipient: { select: { id: true, name: true, image: true } },
+        staff: { select: { id: true, name: true } },
+        messages: {
+          where: user.role === "USER" ? { internal: false } : undefined,
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!item) {
+      return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    }
+
+    return NextResponse.json(item);
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+}
+
+====================================================================
+FILE: app/api/concierge/requests/[id]/respond/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { recipientResponseSchema } from "@/lib/validators";
+import { createNotification } from "@/lib/notifications";
+import { writeAuditLog } from "@/lib/audit";
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireUser();
+    const { id } = await context.params;
+    const body = recipientResponseSchema.parse(await request.json());
+
+    const concierge = await prisma.conciergeRequest.findFirst({
+      where: {
+        id,
+        recipientId: user.id,
+        status: "OUTREACH_SENT",
+      },
+    });
+
+    if (!concierge) {
+      return NextResponse.json(
+        { error: "REQUEST_NOT_AVAILABLE" },
+        { status: 404 }
+      );
+    }
+
+    const statusMap = {
+      INTERESTED: "RECIPIENT_INTERESTED",
+      REPLY_NOW: "RECIPIENT_INTERESTED",
+      MAYBE_LATER: "OUTREACH_SENT",
+      NOT_INTERESTED: "RECIPIENT_DECLINED",
+      BLOCK_REQUESTER: "RECIPIENT_DECLINED",
+      OPT_OUT: "RECIPIENT_DECLINED",
+      REPORT: "RECIPIENT_DECLINED",
+    } as const;
+
+    const result = await prisma.$transaction(async (tx) => {
+      if (body.response === "BLOCK_REQUESTER") {
+        await tx.userBlock.upsert({
+          where: {
+            blockerId_blockedId: {
+              blockerId: user.id,
+              blockedId: concierge.requesterId,
+            },
+          },
+          update: {},
+          create: {
+            blockerId: user.id,
+            blockedId: concierge.requesterId,
+          },
+        });
+      }
+
+      if (body.response === "OPT_OUT") {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { conciergeOptOut: true },
+        });
+      }
+
+      if (body.response === "REPORT") {
+        await tx.safetyReport.create({
+          data: {
+            reporterId: user.id,
+            reportedId: concierge.requesterId,
+            category: "CONCIERGE_OUTREACH_REPORT",
+            description: body.message,
+          },
+        });
+      }
+
+      return tx.conciergeRequest.update({
+        where: { id },
+        data: {
+          recipientResponse: body.response,
+          recipientMessage: body.message,
+          status: statusMap[body.response],
+          respondedAt: new Date(),
+          completedAt:
+            body.response === "MAYBE_LATER" ? undefined : new Date(),
+          messages: body.message
+            ? {
+                create: {
+                  senderId: user.id,
+                  senderRole: user.role,
+                  content: body.message,
+                  internal: false,
+                },
+              }
+            : undefined,
+        },
+      });
+    });
+
+    const requesterBody =
+      body.response === "INTERESTED" || body.response === "REPLY_NOW"
+        ? "The member is open to continuing the conversation."
+        : body.response === "MAYBE_LATER"
+        ? "The member selected maybe later."
+        : "The concierge request has been closed.";
+
+    await createNotification({
+      userId: concierge.requesterId,
+      type: "CONCIERGE_RESPONSE_RECEIVED",
+      title: "Concierge request updated",
+      body: requesterBody,
+      data: { requestId: id },
+    });
+
+    await writeAuditLog({
+      actorId: user.id,
+      action: "CONCIERGE_RECIPIENT_RESPONSE",
+      entityType: "ConciergeRequest",
+      entityId: id,
+      conciergeRequestId: id,
+      metadata: { response: body.response },
+    });
+
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FILE: app/api/concierge/requests/[id]/staff-action/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { staffActionSchema } from "@/lib/validators";
+import { createNotification } from "@/lib/notifications";
+import { writeAuditLog } from "@/lib/audit";
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const staff = await requireRole(["STAFF", "ADMIN"]);
+    const { id } = await context.params;
+    const body = staffActionSchema.parse(await request.json());
+
+    const concierge = await prisma.conciergeRequest.findUnique({
+      where: { id },
+      include: {
+        requester: true,
+        recipient: true,
+      },
+    });
+
+    if (!concierge) {
+      return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    }
+
+    if (body.action === "APPROVE") {
+      const updated = await prisma.conciergeRequest.update({
+        where: { id },
+        data: {
+          status: "APPROVED",
+          staffId: staff.id,
+          staffNotes: body.staffNotes,
+        },
+      });
+
+      await createNotification({
+        userId: concierge.requesterId,
+        type: "CONCIERGE_APPROVED",
+        title: "Concierge request approved",
+        body: "A staff member has approved your request.",
+        data: { requestId: id },
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    if (body.action === "REJECT") {
+      const updated = await prisma.$transaction(async (tx) => {
+        if (concierge.creditConsumed) {
+          await tx.conciergeWallet.update({
+            where: { userId: concierge.requesterId },
+            data: {
+              availableCredits: { increment: 1 },
+              lifetimeUsed: { decrement: 1 },
+            },
+          });
+        }
+
+        return tx.conciergeRequest.update({
+          where: { id },
+          data: {
+            status: "REJECTED",
+            staffId: staff.id,
+            staffNotes: body.staffNotes,
+            creditConsumed: false,
+            completedAt: new Date(),
+          },
+        });
+      });
+
+      await createNotification({
+        userId: concierge.requesterId,
+        type: "CONCIERGE_REJECTED",
+        title: "Concierge request not approved",
+        body: "The request was closed and its credit was returned.",
+        data: { requestId: id },
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    if (body.action === "SEND_OUTREACH") {
+      if (concierge.status !== "APPROVED") {
+        return NextResponse.json(
+          { error: "REQUEST_MUST_BE_APPROVED" },
+          { status: 409 }
+        );
+      }
+
+      const neutralMessage =
+        body.staffMessage ??
+        "A member has requested a one-time concierge introduction. " +
+          "There is no obligation to respond. You may accept, decline, block, " +
+          "report, or opt out of future concierge requests.";
+
+      const updated = await prisma.conciergeRequest.update({
+        where: { id },
+        data: {
+          status: "OUTREACH_SENT",
+          staffId: staff.id,
+          staffMessage: neutralMessage,
+          staffNotes: body.staffNotes,
+          outreachSentAt: new Date(),
+          messages: {
+            create: {
+              senderId: staff.id,
+              senderRole: staff.role,
+              content: neutralMessage,
+              internal: false,
+            },
+          },
+        },
+      });
+
+      await createNotification({
+        userId: concierge.recipientId,
+        type: "CONCIERGE_OUTREACH_SENT",
+        title: "You received a concierge introduction",
+        body: "A one-time, staff-reviewed introduction is waiting for your decision.",
+        data: { requestId: id },
+      });
+
+      await createNotification({
+        userId: concierge.requesterId,
+        type: "CONCIERGE_OUTREACH_SENT",
+        title: "Concierge outreach sent",
+        body: "The recipient can now respond privately through the platform.",
+        data: { requestId: id },
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    if (body.action === "REFUND_CREDIT") {
+      const updated = await prisma.$transaction(async (tx) => {
+        if (concierge.creditConsumed) {
+          await tx.conciergeWallet.update({
+            where: { userId: concierge.requesterId },
+            data: {
+              availableCredits: { increment: 1 },
+              lifetimeUsed: { decrement: 1 },
+            },
+          });
+        }
+
+        return tx.conciergeRequest.update({
+          where: { id },
+          data: { creditConsumed: false },
+        });
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    const updated = await prisma.conciergeRequest.update({
+      where: { id },
+      data: {
+        status: "CLOSED",
+        completedAt: new Date(),
+        staffId: staff.id,
+        staffNotes: body.staffNotes,
+      },
+    });
+
+    await writeAuditLog({
+      actorId: staff.id,
+      action: `CONCIERGE_STAFF_${body.action}`,
+      entityType: "ConciergeRequest",
+      entityId: id,
+      conciergeRequestId: id,
+      metadata: {
+        staffNotes: body.staffNotes,
+      },
+    });
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FILE: app/api/services/catalog/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { canAccessService } from "@/lib/permissions";
+
+export async function GET() {
+  try {
+    const user = await requireUser();
+
+    const services = await prisma.serviceCatalog.findMany({
+      where: { active: true },
+      orderBy: [{ sortOrder: "asc" }, { priceCents: "asc" }],
+    });
+
+    return NextResponse.json(
+      services.map((service) => ({
+        ...service,
+        eligible: canAccessService(user.membershipTier, service),
+      }))
+    );
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+}
+
+====================================================================
+FILE: app/api/services/orders/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { canAccessService } from "@/lib/permissions";
+import { createServiceOrderSchema } from "@/lib/validators";
+import { writeAuditLog } from "@/lib/audit";
+
+export async function GET() {
+  try {
+    const user = await requireUser();
+
+    const orders = await prisma.serviceOrder.findMany({
+      where: { memberId: user.id },
+      include: { service: true, assignedStaff: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json(orders);
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const user = await requireUser();
+    const body = createServiceOrderSchema.parse(await request.json());
+
+    const service = await prisma.serviceCatalog.findUnique({
+      where: { id: body.serviceCatalogId },
+    });
+
+    if (!service || !service.active) {
+      return NextResponse.json({ error: "SERVICE_NOT_FOUND" }, { status: 404 });
+    }
+
+    if (!canAccessService(user.membershipTier, service)) {
+      return NextResponse.json(
+        { error: "MEMBERSHIP_NOT_ELIGIBLE" },
+        { status: 403 }
+      );
+    }
+
+    const dueAt = service.turnaroundHours
+      ? new Date(Date.now() + service.turnaroundHours * 60 * 60 * 1000)
+      : undefined;
+
+    const order = await prisma.serviceOrder.create({
+      data: {
+        memberId: user.id,
+        serviceCatalogId: service.id,
+        intakeJson: body.intake ?? {},
+        memberNotes: body.memberNotes,
+        dueAt,
+      },
+      include: { service: true },
+    });
+
+    await writeAuditLog({
+      actorId: user.id,
+      action: "SERVICE_ORDER_CREATED",
+      entityType: "ServiceOrder",
+      entityId: order.id,
+      serviceOrderId: order.id,
+      metadata: { serviceType: service.type },
+    });
+
+    return NextResponse.json(order, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FILE: app/api/services/orders/[id]/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireUser();
+    const { id } = await context.params;
+
+    const order = await prisma.serviceOrder.findFirst({
+      where: {
+        id,
+        OR: [
+          { memberId: user.id },
+          ...(user.role !== "USER" ? [{}] : []),
+        ],
+      },
+      include: {
+        service: true,
+        assignedStaff: { select: { id: true, name: true } },
+        payments: true,
+      },
+    });
+
+    if (!order) {
+      return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    }
+
+    return NextResponse.json(order);
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+}
+
+====================================================================
+FILE: app/api/payments/checkout/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
+
+export async function POST(request: Request) {
+  try {
+    const user = await requireUser();
+    const { serviceOrderId } = await request.json();
+
+    const order = await prisma.serviceOrder.findFirst({
+      where: {
+        id: serviceOrderId,
+        memberId: user.id,
+        status: "PENDING_PAYMENT",
+      },
+      include: { service: true },
+    });
+
+    if (!order) {
+      return NextResponse.json({ error: "ORDER_NOT_FOUND" }, { status: 404 });
+    }
+
+    const payment = await prisma.payment.create({
+      data: {
+        userId: user.id,
+        serviceOrderId: order.id,
+        amountCents: order.service.priceCents,
+        currency: order.service.currency,
+        metadata: {
+          serviceType: order.service.type,
+          includedUnits: order.service.includedUnits,
+        },
+      },
+    });
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: user.email,
+      success_url:
+        `${process.env.NEXT_PUBLIC_APP_URL}/premium-services?payment=success`,
+      cancel_url:
+        `${process.env.NEXT_PUBLIC_APP_URL}/premium-services?payment=cancelled`,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: order.service.currency,
+            unit_amount: order.service.priceCents,
+            product_data: {
+              name: order.service.name,
+              description: order.service.shortDescription,
+            },
+          },
+        },
+      ],
+      metadata: {
+        paymentId: payment.id,
+        serviceOrderId: order.id,
+        userId: user.id,
+        serviceType: order.service.type,
+      },
+    });
+
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: { stripeCheckoutSessionId: session.id },
+    });
+
+    return NextResponse.json({ checkoutUrl: session.url });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FILE: app/api/payments/webhook/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import Stripe from "stripe";
+import { stripe } from "@/lib/stripe";
+import { prisma } from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
+import { writeAuditLog } from "@/lib/audit";
+
+export const runtime = "nodejs";
+
+export async function POST(request: Request) {
+  const signature = request.headers.get("stripe-signature");
+
+  if (!signature) {
+    return NextResponse.json({ error: "MISSING_SIGNATURE" }, { status: 400 });
+  }
+
+  const rawBody = await request.text();
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      rawBody,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
+  } catch {
+    return NextResponse.json({ error: "INVALID_SIGNATURE" }, { status: 400 });
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    const paymentId = session.metadata?.paymentId;
+    const serviceOrderId = session.metadata?.serviceOrderId;
+    const userId = session.metadata?.userId;
+    const serviceType = session.metadata?.serviceType;
+
+    if (paymentId && serviceOrderId && userId) {
+      await prisma.$transaction(async (tx) => {
+        const existing = await tx.payment.findUnique({
+          where: { id: paymentId },
+        });
+
+        if (!existing || existing.status === "PAID") {
+          return;
+        }
+
+        await tx.payment.update({
+          where: { id: paymentId },
+          data: {
+            status: "PAID",
+            stripePaymentIntentId:
+              typeof session.payment_intent === "string"
+                ? session.payment_intent
+                : undefined,
+          },
+        });
+
+        await tx.serviceOrder.update({
+          where: { id: serviceOrderId },
+          data: { status: "PAID" },
+        });
+
+        if (serviceType === "CONCIERGE_OUTREACH_PACKAGE") {
+          const units = Number(
+            (existing.metadata as { includedUnits?: number } | null)
+              ?.includedUnits ?? 2
+          );
+
+          await tx.conciergeWallet.upsert({
+            where: { userId },
+            update: {
+              availableCredits: { increment: units },
+              lifetimePurchased: { increment: units },
+            },
+            create: {
+              userId,
+              availableCredits: units,
+              lifetimePurchased: units,
+            },
+          });
+
+          await tx.serviceOrder.update({
+            where: { id: serviceOrderId },
+            data: {
+              status: "COMPLETED",
+              completedAt: new Date(),
+              deliveryJson: {
+                creditsAdded: units,
+              },
+            },
+          });
+        }
+      });
+
+      await createNotification({
+        userId,
+        type: "PAYMENT_RECEIPT",
+        title: "Payment received",
+        body:
+          serviceType === "CONCIERGE_OUTREACH_PACKAGE"
+            ? "Your concierge credits are now available."
+            : "Your premium service order has been received.",
+        data: { serviceOrderId },
+      });
+
+      await writeAuditLog({
+        actorId: userId,
+        action: "PAYMENT_COMPLETED",
+        entityType: "ServiceOrder",
+        entityId: serviceOrderId,
+        serviceOrderId,
+        metadata: { stripeSessionId: session.id },
+      });
+    }
+  }
+
+  if (event.type === "checkout.session.expired") {
+    const session = event.data.object;
+    const paymentId = session.metadata?.paymentId;
+
+    if (paymentId) {
+      await prisma.payment.updateMany({
+        where: { id: paymentId, status: "PENDING" },
+        data: { status: "FAILED" },
+      });
+    }
+  }
+
+  return NextResponse.json({ received: true });
+}
+
+====================================================================
+FILE: app/api/staff/concierge/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(request: Request) {
+  try {
+    await requireRole(["STAFF", "ADMIN"]);
+
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status");
+
+    const requests = await prisma.conciergeRequest.findMany({
+      where: status
+        ? { status: status as never }
+        : {
+            status: {
+              in: ["PENDING_REVIEW", "APPROVED", "OUTREACH_SENT"],
+            },
+          },
+      include: {
+        requester: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+            membershipTier: true,
+          },
+        },
+        recipient: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+            conciergeOptOut: true,
+          },
+        },
+        staff: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return NextResponse.json(requests);
+  } catch {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+}
+
+====================================================================
+FILE: app/api/staff/service-orders/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+
+const staffServiceUpdateSchema = z.object({
+  orderId: z.string().cuid(),
+  action: z.enum([
+    "ASSIGN_TO_ME",
+    "START",
+    "REQUEST_MEMBER_INFO",
+    "COMPLETE",
+    "CANCEL",
+  ]),
+  staffNotes: z.string().max(3000).optional(),
+  delivery: z.record(z.string(), z.unknown()).optional(),
+});
+
+export async function GET() {
+  try {
+    await requireRole(["STAFF", "ADMIN"]);
+
+    const orders = await prisma.serviceOrder.findMany({
+      where: {
+        status: {
+          in: ["PAID", "ASSIGNED", "IN_PROGRESS", "AWAITING_MEMBER"],
+        },
+      },
+      include: {
+        member: { select: { id: true, name: true, email: true } },
+        service: true,
+        assignedStaff: { select: { id: true, name: true } },
+      },
+      orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
+    });
+
+    return NextResponse.json(orders);
+  } catch {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const staff = await requireRole(["STAFF", "ADMIN"]);
+    const body = staffServiceUpdateSchema.parse(await request.json());
+
+    const dataMap = {
+      ASSIGN_TO_ME: {
+        status: "ASSIGNED",
+        assignedStaffId: staff.id,
+      },
+      START: {
+        status: "IN_PROGRESS",
+        assignedStaffId: staff.id,
+      },
+      REQUEST_MEMBER_INFO: {
+        status: "AWAITING_MEMBER",
+        assignedStaffId: staff.id,
+      },
+      COMPLETE: {
+        status: "COMPLETED",
+        assignedStaffId: staff.id,
+        completedAt: new Date(),
+        deliveryJson: body.delivery ?? {},
+      },
+      CANCEL: {
+        status: "CANCELLED",
+        assignedStaffId: staff.id,
+      },
+    } as const;
+
+    const updated = await prisma.serviceOrder.update({
+      where: { id: body.orderId },
+      data: {
+        ...dataMap[body.action],
+        staffNotes: body.staffNotes,
+      },
+      include: { service: true, member: true },
+    });
+
+    await createNotification({
+      userId: updated.memberId,
+      type: "SERVICE_ORDER_UPDATE",
+      title: `${updated.service.name} updated`,
+      body: `Order status: ${updated.status.replaceAll("_", " ")}`,
+      data: { orderId: updated.id },
+    });
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+import { createNotification } from "@/lib/notifications";
+
+====================================================================
+FILE: app/api/staff/analytics/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function GET() {
+  try {
+    await requireRole(["STAFF", "ADMIN"]);
+
+    const [
+      totalRequests,
+      pendingReview,
+      outreachSent,
+      interested,
+      declined,
+      completedServiceOrders,
+      paidRevenue,
+    ] = await Promise.all([
+      prisma.conciergeRequest.count(),
+      prisma.conciergeRequest.count({
+        where: { status: "PENDING_REVIEW" },
+      }),
+      prisma.conciergeRequest.count({
+        where: { status: "OUTREACH_SENT" },
+      }),
+      prisma.conciergeRequest.count({
+        where: { status: "RECIPIENT_INTERESTED" },
+      }),
+      prisma.conciergeRequest.count({
+        where: { status: "RECIPIENT_DECLINED" },
+      }),
+      prisma.serviceOrder.count({
+        where: { status: "COMPLETED" },
+      }),
+      prisma.payment.aggregate({
+        where: { status: "PAID" },
+        _sum: { amountCents: true },
+      }),
+    ]);
+
+    return NextResponse.json({
+      totalRequests,
+      pendingReview,
+      outreachSent,
+      interested,
+      declined,
+      responseRate:
+        outreachSent + interested + declined > 0
+          ? Number(
+              (
+                ((interested + declined) /
+                  (outreachSent + interested + declined)) *
+                100
+              ).toFixed(1)
+            )
+          : 0,
+      successRate:
+        interested + declined > 0
+          ? Number(((interested / (interested + declined)) * 100).toFixed(1))
+          : 0,
+      completedServiceOrders,
+      revenueCents: paidRevenue._sum.amountCents ?? 0,
+    });
+  } catch {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+}
+
+====================================================================
+FILE: app/api/admin/service-catalog/route.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+
+const updateCatalogSchema = z.object({
+  id: z.string().cuid(),
+  name: z.string().min(2).max(100).optional(),
+  shortDescription: z.string().min(5).max(250).optional(),
+  fullDescription: z.string().min(10).max(3000).optional(),
+  priceCents: z.number().int().min(0).optional(),
+  includedUnits: z.number().int().min(1).nullable().optional(),
+  active: z.boolean().optional(),
+  freeEligible: z.boolean().optional(),
+  eliteEligible: z.boolean().optional(),
+  premiumEligible: z.boolean().optional(),
+  turnaroundHours: z.number().int().positive().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+export async function GET() {
+  try {
+    await requireRole(["ADMIN"]);
+    const services = await prisma.serviceCatalog.findMany({
+      orderBy: { sortOrder: "asc" },
+    });
+    return NextResponse.json(services);
+  } catch {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    await requireRole(["ADMIN"]);
+    const body = updateCatalogSchema.parse(await request.json());
+
+    const { id, ...data } = body;
+    const service = await prisma.serviceCatalog.update({
+      where: { id },
+      data,
+    });
+
+    return NextResponse.json(service);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+====================================================================
+FILE: components/concierge/ConciergePurchaseCard.tsx
+====================================================================
+
+"use client";
+
+import { useState } from "react";
+
+type Props = {
+  serviceCatalogId: string;
+  priceLabel?: string;
+};
+
+export function ConciergePurchaseCard({
+  serviceCatalogId,
+  priceLabel = "$20",
+}: Props) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function purchase() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const orderResponse = await fetch("/api/services/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceCatalogId,
+          intake: {
+            acknowledgement:
+              "I understand outreach is one-time, staff-reviewed, and optional for the recipient.",
+          },
+        }),
+      });
+
+      const order = await orderResponse.json();
+
+      if (!orderResponse.ok) {
+        throw new Error(order.error ?? "Unable to create order.");
+      }
+
+      const checkoutResponse = await fetch("/api/payments/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serviceOrderId: order.id }),
+      });
+
+      const checkout = await checkoutResponse.json();
+
+      if (!checkoutResponse.ok || !checkout.checkoutUrl) {
+        throw new Error(checkout.error ?? "Unable to open checkout.");
+      }
+
+      window.location.href = checkout.checkoutUrl;
+    } catch (purchaseError) {
+      setError(
+        purchaseError instanceof Error
+          ? purchaseError.message
+          : "Purchase failed."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="rounded-3xl border border-pink-200 bg-white p-6 shadow-sm">
+      <div className="mb-3 inline-flex rounded-full bg-pink-100 px-3 py-1 text-sm font-semibold text-pink-700">
+        Elite & Premium Add-on
+      </div>
+
+      <h2 className="text-2xl font-bold text-slate-900">
+        VIP Match Concierge
+      </h2>
+
+      <p className="mt-2 text-slate-600">
+        Two respectful, one-time introductions reviewed and delivered by
+        trained staff.
+      </p>
+
+      <div className="mt-6 flex items-end gap-2">
+        <span className="text-4xl font-black text-slate-900">{priceLabel}</span>
+        <span className="pb-1 text-slate-500">for 2 requests</span>
+      </div>
+
+      <ul className="mt-6 space-y-3 text-sm text-slate-700">
+        <li>✓ Human-reviewed outreach</li>
+        <li>✓ Recipient privacy protected</li>
+        <li>✓ No off-platform contact details</li>
+        <li>✓ Recipient may decline, block, report, or opt out</li>
+        <li>✓ Credit returned when staff rejects a request</li>
+      </ul>
+
+      <button
+        type="button"
+        onClick={purchase}
+        disabled={loading}
+        className="mt-6 w-full rounded-xl bg-pink-500 px-5 py-3 font-semibold text-white disabled:opacity-60"
+      >
+        {loading ? "Opening secure checkout..." : "Purchase 2 Requests"}
+      </button>
+
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
+====================================================================
+FILE: components/concierge/ConciergeRequestForm.tsx
+====================================================================
+
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+
+type Props = {
+  recipientId: string;
+  recipientName: string;
+};
+
+export function ConciergeRequestForm({
+  recipientId,
+  recipientName,
+}: Props) {
+  const [reason, setReason] = useState("NO_RESPONSE");
+  const [message, setMessage] = useState("");
+  const [eligibility, setEligibility] = useState<{
+    allowed?: boolean;
+    code?: string;
+    walletCredits?: number;
+  }>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState("");
+
+  useEffect(() => {
+    fetch(`/api/concierge/eligibility/${recipientId}`)
+      .then((response) => response.json())
+      .then(setEligibility)
+      .catch(() =>
+        setEligibility({ allowed: false, code: "ELIGIBILITY_CHECK_FAILED" })
+      );
+  }, [recipientId]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setResult("");
+
+    try {
+      const response = await fetch("/api/concierge/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientId,
+          reason,
+          requesterMessage: message,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to submit request.");
+      }
+
+      setResult("Request submitted for staff review.");
+      setMessage("");
+    } catch (error) {
+      setResult(error instanceof Error ? error.message : "Submission failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="mx-auto max-w-2xl rounded-3xl border bg-white p-6 shadow-sm"
+    >
+      <h1 className="text-2xl font-bold">Request Concierge Introduction</h1>
+
+      <p className="mt-2 text-slate-600">
+        Ask staff to send one respectful introduction to {recipientName}.
+        The recipient is never required to respond.
+      </p>
+
+      <div className="mt-5 rounded-xl bg-slate-50 p-4 text-sm">
+        <div>
+          Eligibility:{" "}
+          <strong>
+            {eligibility.allowed
+              ? "Eligible"
+              : eligibility.code ?? "Checking..."}
+          </strong>
+        </div>
+        <div>
+          Credits: <strong>{eligibility.walletCredits ?? "—"}</strong>
+        </div>
+      </div>
+
+      <label className="mt-5 block text-sm font-semibold">Reason</label>
+      <select
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        className="mt-2 w-full rounded-xl border px-4 py-3"
+      >
+        <option value="NO_RESPONSE">No response</option>
+        <option value="CONVERSATION_STOPPED">Conversation stopped</option>
+        <option value="MISSED_CONNECTION">Missed connection</option>
+        <option value="PROFESSIONAL_INTRODUCTION">
+          Professional introduction
+        </option>
+      </select>
+
+      <label className="mt-5 block text-sm font-semibold">
+        Message for staff review
+      </label>
+      <textarea
+        value={message}
+        onChange={(event) => setMessage(event.target.value)}
+        rows={6}
+        maxLength={500}
+        placeholder="Write a respectful message without phone numbers, email addresses, or social media handles."
+        className="mt-2 w-full rounded-xl border px-4 py-3"
+      />
+
+      <div className="mt-2 text-right text-xs text-slate-500">
+        {message.length}/500
+      </div>
+
+      <label className="mt-4 flex items-start gap-3 text-sm text-slate-600">
+        <input required type="checkbox" className="mt-1" />
+        <span>
+          I understand this is a one-time, staff-reviewed introduction and the
+          recipient may decline, block, report, ignore, or opt out.
+        </span>
+      </label>
+
+      <button
+        type="submit"
+        disabled={!eligibility.allowed || submitting}
+        className="mt-6 w-full rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white disabled:opacity-50"
+      >
+        {submitting ? "Submitting..." : "Use 1 Concierge Credit"}
+      </button>
+
+      {result && <p className="mt-4 text-sm">{result}</p>}
+    </form>
+  );
+}
+
+====================================================================
+FILE: components/concierge/RecipientDecisionCard.tsx
+====================================================================
+
+"use client";
+
+import { useState } from "react";
+
+export function RecipientDecisionCard({
+  requestId,
+  staffMessage,
+}: {
+  requestId: string;
+  staffMessage: string;
+}) {
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState("");
+
+  async function respond(response: string) {
+    const result = await fetch(
+      `/api/concierge/requests/${requestId}/respond`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response, message: message || undefined }),
+      }
+    );
+
+    const data = await result.json();
+    setStatus(result.ok ? "Your decision was saved." : data.error);
+  }
+
+  return (
+    <section className="rounded-3xl border bg-white p-6 shadow-sm">
+      <div className="rounded-2xl bg-pink-50 p-4 text-slate-700">
+        {staffMessage}
+      </div>
+
+      <textarea
+        rows={4}
+        maxLength={500}
+        value={message}
+        onChange={(event) => setMessage(event.target.value)}
+        placeholder="Optional private reply"
+        className="mt-4 w-full rounded-xl border p-3"
+      />
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <button
+          onClick={() => respond("INTERESTED")}
+          className="rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white"
+        >
+          I’m Interested
+        </button>
+
+        <button
+          onClick={() => respond("REPLY_NOW")}
+          className="rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white"
+        >
+          Reply Now
+        </button>
+
+        <button
+          onClick={() => respond("MAYBE_LATER")}
+          className="rounded-xl border px-4 py-3"
+        >
+          Maybe Later
+        </button>
+
+        <button
+          onClick={() => respond("NOT_INTERESTED")}
+          className="rounded-xl border px-4 py-3"
+        >
+          Not Interested
+        </button>
+
+        <button
+          onClick={() => respond("BLOCK_REQUESTER")}
+          className="rounded-xl border border-red-200 px-4 py-3 text-red-700"
+        >
+          Block Member
+        </button>
+
+        <button
+          onClick={() => respond("OPT_OUT")}
+          className="rounded-xl border border-red-200 px-4 py-3 text-red-700"
+        >
+          Opt Out of Concierge
+        </button>
+
+        <button
+          onClick={() => respond("REPORT")}
+          className="rounded-xl border border-red-300 px-4 py-3 text-red-700 sm:col-span-2"
+        >
+          Report This Request
+        </button>
+      </div>
+
+      {status && <p className="mt-4 text-sm">{status}</p>}
+    </section>
+  );
+}
+
+====================================================================
+FILE: components/premium-services/ServiceCatalog.tsx
+====================================================================
+
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Service = {
+  id: string;
+  name: string;
+  shortDescription: string;
+  priceCents: number;
+  currency: string;
+  includedUnits?: number | null;
+  eligible: boolean;
+  turnaroundHours?: number | null;
+};
+
+export function ServiceCatalog() {
+  const [services, setServices] = useState<Service[]>([]);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/services/catalog")
+      .then((response) => response.json())
+      .then(setServices)
+      .catch(() => setError("Unable to load premium services."));
+  }, []);
+
+  async function buy(serviceCatalogId: string) {
+    setLoadingId(serviceCatalogId);
+    setError("");
+
+    try {
+      const orderResponse = await fetch("/api/services/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceCatalogId,
+          intake: {},
+        }),
+      });
+
+      const order = await orderResponse.json();
+      if (!orderResponse.ok) throw new Error(order.error);
+
+      const checkoutResponse = await fetch("/api/payments/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serviceOrderId: order.id }),
+      });
+
+      const checkout = await checkoutResponse.json();
+      if (!checkoutResponse.ok) throw new Error(checkout.error);
+
+      window.location.assign(checkout.checkoutUrl);
+    } catch (purchaseError) {
+      setError(
+        purchaseError instanceof Error
+          ? purchaseError.message
+          : "Unable to start checkout."
+      );
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
+  return (
+    <div>
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        {services.map((service) => (
+          <article
+            key={service.id}
+            className="rounded-3xl border bg-white p-6 shadow-sm"
+          >
+            <h3 className="text-xl font-bold text-slate-900">
+              {service.name}
+            </h3>
+
+            <p className="mt-2 min-h-12 text-sm text-slate-600">
+              {service.shortDescription}
+            </p>
+
+            <div className="mt-5 text-3xl font-black">
+              ${(service.priceCents / 100).toFixed(2)}
+            </div>
+
+            {service.includedUnits && (
+              <p className="mt-1 text-sm text-slate-500">
+                Includes {service.includedUnits} units
+              </p>
+            )}
+
+            {service.turnaroundHours && (
+              <p className="mt-1 text-sm text-slate-500">
+                Target turnaround: {service.turnaroundHours} hours
+              </p>
+            )}
+
+            <button
+              disabled={!service.eligible || loadingId === service.id}
+              onClick={() => buy(service.id)}
+              className="mt-6 w-full rounded-xl bg-pink-500 px-4 py-3 font-semibold text-white disabled:bg-slate-300"
+            >
+              {!service.eligible
+                ? "Upgrade Required"
+                : loadingId === service.id
+                ? "Opening Checkout..."
+                : "Purchase Service"}
+            </button>
+          </article>
+        ))}
+      </div>
+
+      {error && <p className="mt-5 text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+====================================================================
+FILE: components/concierge/StaffConciergeQueue.tsx
+====================================================================
+
+"use client";
+
+import { useEffect, useState } from "react";
+
+type QueueItem = {
+  id: string;
+  status: string;
+  reason: string;
+  requesterMessage: string;
+  createdAt: string;
+  requester: {
+    name: string | null;
+    membershipTier: string;
+  };
+  recipient: {
+    name: string | null;
+    conciergeOptOut: boolean;
+  };
+};
+
+export function StaffConciergeQueue() {
+  const [items, setItems] = useState<QueueItem[]>([]);
+  const [error, setError] = useState("");
+
+  async function load() {
+    const response = await fetch("/api/staff/concierge");
+    const data = await response.json();
+
+    if (!response.ok) {
+      setError(data.error ?? "Unable to load queue.");
+      return;
+    }
+
+    setItems(data);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function action(
+    id: string,
+    actionName: "APPROVE" | "REJECT" | "SEND_OUTREACH" | "CLOSE"
+  ) {
+    const staffMessage =
+      actionName === "SEND_OUTREACH"
+        ? "A member has requested a one-time concierge introduction. There is no obligation to respond. You may accept, decline, block, report, or opt out."
+        : undefined;
+
+    const response = await fetch(
+      `/api/concierge/requests/${id}/staff-action`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: actionName,
+          staffMessage,
+        }),
+      }
+    );
+
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error ?? "Action failed.");
+      return;
+    }
+
+    await load();
+  }
+
+  return (
+    <div className="space-y-4">
+      {items.map((item) => (
+        <article
+          key={item.id}
+          className="rounded-2xl border bg-white p-5 shadow-sm"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold">
+                {item.requester.name ?? "Member"} →{" "}
+                {item.recipient.name ?? "Recipient"}
+              </h3>
+              <p className="text-sm text-slate-500">
+                {item.requester.membershipTier} · {item.status}
+              </p>
+            </div>
+            <time className="text-sm text-slate-500">
+              {new Date(item.createdAt).toLocaleString()}
+            </time>
+          </div>
+
+          <div className="mt-4 rounded-xl bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase text-slate-500">
+              Reason
+            </div>
+            <div>{item.reason.replaceAll("_", " ")}</div>
+
+            <div className="mt-3 text-xs font-semibold uppercase text-slate-500">
+              Requested message
+            </div>
+            <p>{item.requesterMessage}</p>
+          </div>
+
+          {item.recipient.conciergeOptOut && (
+            <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              Recipient has opted out. Reject this request.
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {item.status === "PENDING_REVIEW" && (
+              <>
+                <button
+                  onClick={() => action(item.id, "APPROVE")}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-white"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => action(item.id, "REJECT")}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-white"
+                >
+                  Reject & Return Credit
+                </button>
+              </>
+            )}
+
+            {item.status === "APPROVED" && (
+              <button
+                onClick={() => action(item.id, "SEND_OUTREACH")}
+                className="rounded-lg bg-pink-500 px-4 py-2 text-white"
+              >
+                Send Neutral Outreach
+              </button>
+            )}
+
+            <button
+              onClick={() => action(item.id, "CLOSE")}
+              className="rounded-lg border px-4 py-2"
+            >
+              Close
+            </button>
+          </div>
+        </article>
+      ))}
+
+      {error && <p className="text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+====================================================================
+FILE: app/premium-services/page.tsx
+====================================================================
+
+import { ServiceCatalog } from "@/components/premium-services/ServiceCatalog";
+
+export default function PremiumServicesPage() {
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10">
+      <div className="mx-auto max-w-7xl">
+        <div className="max-w-3xl">
+          <p className="font-semibold text-pink-600">Member Services</p>
+          <h1 className="mt-2 text-4xl font-black text-slate-900">
+            Premium Services Marketplace
+          </h1>
+          <p className="mt-4 text-lg text-slate-600">
+            Purchase optional human-assisted services without changing your
+            monthly membership plan.
+          </p>
+        </div>
+
+        <div className="mt-10">
+          <ServiceCatalog />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+====================================================================
+FILE: app/concierge/page.tsx
+====================================================================
+
+import Link from "next/link";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export default async function ConciergeHomePage() {
+  const user = await requireUser();
+
+  const wallet = await prisma.conciergeWallet.upsert({
+    where: { userId: user.id },
+    update: {},
+    create: { userId: user.id },
+  });
+
+  const catalog = await prisma.serviceCatalog.findUnique({
+    where: { type: "CONCIERGE_OUTREACH_PACKAGE" },
+  });
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10">
+      <div className="mx-auto max-w-5xl">
+        <h1 className="text-4xl font-black text-slate-900">
+          VIP Match Concierge
+        </h1>
+
+        <p className="mt-3 max-w-2xl text-slate-600">
+          Staff-reviewed, one-time introductions for Elite and Premium members.
+        </p>
+
+        <div className="mt-8 grid gap-5 md:grid-cols-3">
+          <div className="rounded-2xl border bg-white p-5">
+            <div className="text-sm text-slate-500">Available credits</div>
+            <div className="mt-2 text-4xl font-black">
+              {wallet.availableCredits}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-white p-5">
+            <div className="text-sm text-slate-500">Lifetime purchased</div>
+            <div className="mt-2 text-4xl font-black">
+              {wallet.lifetimePurchased}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-white p-5">
+            <div className="text-sm text-slate-500">Lifetime used</div>
+            <div className="mt-2 text-4xl font-black">
+              {wallet.lifetimeUsed}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link
+            href="/premium-services"
+            className="rounded-xl bg-pink-500 px-5 py-3 font-semibold text-white"
+          >
+            Buy {catalog?.includedUnits ?? 2} Requests for $
+            {((catalog?.priceCents ?? 2000) / 100).toFixed(2)}
+          </Link>
+
+          <Link
+            href="/concierge/requests"
+            className="rounded-xl border bg-white px-5 py-3 font-semibold"
+          >
+            View My Requests
+          </Link>
+        </div>
+
+        <section className="mt-10 rounded-3xl border bg-white p-6">
+          <h2 className="text-xl font-bold">How it works</h2>
+          <ol className="mt-4 grid gap-4 md:grid-cols-4">
+            <li className="rounded-xl bg-slate-50 p-4">1. Buy credits</li>
+            <li className="rounded-xl bg-slate-50 p-4">
+              2. Select an eligible member
+            </li>
+            <li className="rounded-xl bg-slate-50 p-4">
+              3. Staff reviews the request
+            </li>
+            <li className="rounded-xl bg-slate-50 p-4">
+              4. Recipient decides freely
+            </li>
+          </ol>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+====================================================================
+FILE: app/concierge/new/[recipientId]/page.tsx
+====================================================================
+
+import { notFound } from "next/navigation";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { ConciergeRequestForm } from "@/components/concierge/ConciergeRequestForm";
+
+export default async function NewConciergeRequestPage({
+  params,
+}: {
+  params: Promise<{ recipientId: string }>;
+}) {
+  await requireUser();
+  const { recipientId } = await params;
+
+  const recipient = await prisma.user.findUnique({
+    where: { id: recipientId },
+    select: { id: true, name: true },
+  });
+
+  if (!recipient) notFound();
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10">
+      <ConciergeRequestForm
+        recipientId={recipient.id}
+        recipientName={recipient.name ?? "this member"}
+      />
+    </main>
+  );
+}
+
+====================================================================
+FILE: app/concierge/requests/page.tsx
+====================================================================
+
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { RecipientDecisionCard } from "@/components/concierge/RecipientDecisionCard";
+
+export default async function ConciergeRequestsPage() {
+  const user = await requireUser();
+
+  const requests = await prisma.conciergeRequest.findMany({
+    where: {
+      OR: [{ requesterId: user.id }, { recipientId: user.id }],
+    },
+    include: {
+      requester: { select: { name: true } },
+      recipient: { select: { name: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10">
+      <div className="mx-auto max-w-4xl">
+        <h1 className="text-3xl font-black">Concierge Requests</h1>
+
+        <div className="mt-8 space-y-5">
+          {requests.map((request) => {
+            const isRecipient = request.recipientId === user.id;
+
+            return (
+              <article
+                key={request.id}
+                className="rounded-3xl border bg-white p-6 shadow-sm"
+              >
+                <div className="flex flex-wrap justify-between gap-3">
+                  <div>
+                    <h2 className="font-bold">
+                      {isRecipient
+                        ? `Introduction from ${request.requester.name ?? "a member"}`
+                        : `Request for ${request.recipient.name ?? "member"}`}
+                    </h2>
+                    <p className="text-sm text-slate-500">
+                      {request.status.replaceAll("_", " ")}
+                    </p>
+                  </div>
+
+                  <time className="text-sm text-slate-500">
+                    {request.createdAt.toLocaleString()}
+                  </time>
+                </div>
+
+                {isRecipient &&
+                  request.status === "OUTREACH_SENT" &&
+                  request.staffMessage && (
+                    <div className="mt-5">
+                      <RecipientDecisionCard
+                        requestId={request.id}
+                        staffMessage={request.staffMessage}
+                      />
+                    </div>
+                  )}
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+====================================================================
+FILE: app/staff/concierge/page.tsx
+====================================================================
+
+import { requireRole } from "@/lib/auth";
+import { StaffConciergeQueue } from "@/components/concierge/StaffConciergeQueue";
+
+export default async function StaffConciergePage() {
+  await requireRole(["STAFF", "ADMIN"]);
+
+  return (
+    <main className="min-h-screen bg-slate-100 px-4 py-10">
+      <div className="mx-auto max-w-6xl">
+        <p className="font-semibold text-pink-600">Staff Operations</p>
+        <h1 className="mt-2 text-4xl font-black">Concierge Review Queue</h1>
+        <p className="mt-3 max-w-3xl text-slate-600">
+          Review safety eligibility, approve only respectful requests, and send
+          a neutral one-time outreach. Never pressure a recipient or disclose
+          private activity information.
+        </p>
+
+        <div className="mt-8">
+          <StaffConciergeQueue />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+====================================================================
+FILE: app/admin/concierge/page.tsx
+====================================================================
+
+import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export default async function AdminConciergePage() {
+  await requireRole(["ADMIN"]);
+
+  const [
+    total,
+    pending,
+    interested,
+    declined,
+    services,
+    revenue,
+  ] = await Promise.all([
+    prisma.conciergeRequest.count(),
+    prisma.conciergeRequest.count({
+      where: { status: "PENDING_REVIEW" },
+    }),
+    prisma.conciergeRequest.count({
+      where: { status: "RECIPIENT_INTERESTED" },
+    }),
+    prisma.conciergeRequest.count({
+      where: { status: "RECIPIENT_DECLINED" },
+    }),
+    prisma.serviceCatalog.findMany({
+      orderBy: { sortOrder: "asc" },
+    }),
+    prisma.payment.aggregate({
+      where: { status: "PAID" },
+      _sum: { amountCents: true },
+    }),
+  ]);
+
+  const successRate =
+    interested + declined > 0
+      ? ((interested / (interested + declined)) * 100).toFixed(1)
+      : "0.0";
+
+  return (
+    <main className="min-h-screen bg-slate-100 px-4 py-10">
+      <div className="mx-auto max-w-7xl">
+        <h1 className="text-4xl font-black">Concierge Administration</h1>
+
+        <div className="mt-8 grid gap-4 md:grid-cols-5">
+          {[
+            ["Total Requests", total],
+            ["Pending Review", pending],
+            ["Interested", interested],
+            ["Success Rate", `${successRate}%`],
+            [
+              "Revenue",
+              `$${((revenue._sum.amountCents ?? 0) / 100).toFixed(2)}`,
+            ],
+          ].map(([label, value]) => (
+            <article key={String(label)} className="rounded-2xl bg-white p-5">
+              <div className="text-sm text-slate-500">{label}</div>
+              <div className="mt-2 text-3xl font-black">{value}</div>
+            </article>
+          ))}
+        </div>
+
+        <section className="mt-8 rounded-3xl bg-white p-6">
+          <h2 className="text-2xl font-bold">Service Catalog</h2>
+
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="p-3">Service</th>
+                  <th className="p-3">Price</th>
+                  <th className="p-3">Units</th>
+                  <th className="p-3">Elite</th>
+                  <th className="p-3">Premium</th>
+                  <th className="p-3">Active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {services.map((service) => (
+                  <tr key={service.id} className="border-b">
+                    <td className="p-3 font-semibold">{service.name}</td>
+                    <td className="p-3">
+                      ${(service.priceCents / 100).toFixed(2)}
+                    </td>
+                    <td className="p-3">{service.includedUnits ?? "—"}</td>
+                    <td className="p-3">
+                      {service.eliteEligible ? "Yes" : "No"}
+                    </td>
+                    <td className="p-3">
+                      {service.premiumEligible ? "Yes" : "No"}
+                    </td>
+                    <td className="p-3">{service.active ? "Yes" : "No"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+====================================================================
+FILE: prisma/seed.ts
+====================================================================
+
+import { PrismaClient, ServiceType } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+const services = [
+  {
+    type: ServiceType.CONCIERGE_OUTREACH_PACKAGE,
+    name: "VIP Match Concierge",
+    shortDescription:
+      "Two respectful, staff-reviewed, one-time introductions.",
+    fullDescription:
+      "Purchase two concierge credits. Each credit permits one staff-reviewed outreach to an eligible member. Recipients may freely accept, decline, ignore, block, report, or opt out.",
+    priceCents: 2000,
+    includedUnits: 2,
+    freeEligible: false,
+    eliteEligible: true,
+    premiumEligible: true,
+    turnaroundHours: 48,
+    sortOrder: 1,
+  },
+  {
+    type: ServiceType.PROFILE_REVIEW,
+    name: "Profile Review",
+    shortDescription:
+      "Receive a structured review of your profile clarity, tone, and completeness.",
+    fullDescription:
+      "A trained team member reviews your headline, biography, interests, prompts, safety signals, and completeness. You receive specific written recommendations.",
+    priceCents: 1000,
+    freeEligible: false,
+    eliteEligible: true,
+    premiumEligible: true,
+    turnaroundHours: 72,
+    sortOrder: 2,
+  },
+  {
+    type: ServiceType.PROFILE_OPTIMIZATION,
+    name: "Profile Optimization",
+    shortDescription:
+      "Staff-assisted rewrite and presentation improvement for your dating profile.",
+    fullDescription:
+      "Includes biography restructuring, prompt refinement, interest ordering, tone improvement, and a final optimized profile draft for your approval.",
+    priceCents: 1500,
+    freeEligible: false,
+    eliteEligible: true,
+    premiumEligible: true,
+    turnaroundHours: 96,
+    sortOrder: 3,
+  },
+  {
+    type: ServiceType.PHOTO_REVIEW,
+    name: "Photo Review & Suggestions",
+    shortDescription:
+      "Get practical recommendations on photo order, quality, variety, and presentation.",
+    fullDescription:
+      "Staff reviews uploaded profile photos for clarity, lighting, composition, variety, authenticity, and compliance. This is not biometric analysis or attractiveness scoring.",
+    priceCents: 1000,
+    freeEligible: false,
+    eliteEligible: true,
+    premiumEligible: true,
+    turnaroundHours: 72,
+    sortOrder: 4,
+  },
+  {
+    type: ServiceType.BACKGROUND_CHECK_REQUEST,
+    name: "Background Check Request",
+    shortDescription:
+      "Consent-based identity and public-record verification intake.",
+    fullDescription:
+      "Starts a consent-based verification workflow through an approved vendor. The member being checked must provide authorization. Results must follow applicable laws and platform policy.",
+    priceCents: 2500,
+    freeEligible: false,
+    eliteEligible: true,
+    premiumEligible: true,
+    turnaroundHours: 120,
+    sortOrder: 5,
+  },
+  {
+    type: ServiceType.DATE_PLANNING,
+    name: "Date Planning Assistance",
+    shortDescription:
+      "Receive a personalized plan based on budget, location, accessibility, and interests.",
+    fullDescription:
+      "Staff creates a practical date plan with venue ideas, timing, transportation considerations, safety reminders, backup options, and budget guidance.",
+    priceCents: 2000,
+    freeEligible: false,
+    eliteEligible: true,
+    premiumEligible: true,
+    turnaroundHours: 72,
+    sortOrder: 6,
+  },
+  {
+    type: ServiceType.RELATIONSHIP_COACHING,
+    name: "Relationship Coaching Session",
+    shortDescription:
+      "Book a private guidance session with a qualified coach.",
+    fullDescription:
+      "A scheduled coaching session covering communication, expectations, boundaries, confidence, and healthy relationship practices. This service is not therapy or crisis care.",
+    priceCents: 3000,
+    freeEligible: false,
+    eliteEligible: true,
+    premiumEligible: true,
+    turnaroundHours: 168,
+    sortOrder: 7,
+  },
+  {
+    type: ServiceType.PRIORITY_SUPPORT,
+    name: "Priority Support",
+    shortDescription:
+      "Move an eligible support request to the priority assistance queue.",
+    fullDescription:
+      "Provides expedited response handling for account, subscription, and platform-support matters. Safety emergencies still follow a separate urgent escalation process.",
+    priceCents: 500,
+    freeEligible: false,
+    eliteEligible: true,
+    premiumEligible: true,
+    turnaroundHours: 12,
+    sortOrder: 8,
+  },
+];
+
+async function main() {
+  for (const service of services) {
+    await prisma.serviceCatalog.upsert({
+      where: { type: service.type },
+      update: service,
+      create: service,
+    });
+  }
+
+  console.log(`Seeded ${services.length} premium services.`);
+}
+
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
+
+====================================================================
+FILE: middleware.ts
+====================================================================
+
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+export function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  /*
+  Keep authentication enforcement inside server routes/pages as the source
+  of truth. This middleware can also be wired to Auth.js middleware after
+  your existing authentication module is connected.
+  */
+
+  if (pathname.startsWith("/api/payments/webhook")) {
+    return NextResponse.next();
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [
+    "/concierge/:path*",
+    "/premium-services/:path*",
+    "/staff/:path*",
+    "/admin/:path*",
+    "/api/concierge/:path*",
+    "/api/services/:path*",
+    "/api/staff/:path*",
+    "/api/admin/:path*",
+  ],
+};
+
+====================================================================
+INTEGRATION BUTTON FOR MEMBER PROFILE PAGE
+====================================================================
+
+Add this link to the profile of another member:
+
+import Link from "next/link";
+
+export function ConciergeProfileAction({
+  recipientId,
+  membershipTier,
+}: {
+  recipientId: string;
+  membershipTier: "FREE" | "ELITE" | "PREMIUM";
+}) {
+  if (membershipTier === "FREE") {
+    return (
+      <Link
+        href="/pricing"
+        className="rounded-xl border px-4 py-3 font-semibold"
+      >
+        Upgrade to Use Match Concierge
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      href={`/concierge/new/${recipientId}`}
+      className="rounded-xl bg-pink-500 px-4 py-3 font-semibold text-white"
+    >
+      Request Concierge Introduction
+    </Link>
+  );
+}
+
+====================================================================
+RECOMMENDED SERVICE INTAKE FIELDS
+====================================================================
+
+1. PROFILE REVIEW
+{
+  "profileId": "current-user-profile-id",
+  "focusAreas": ["BIO", "PROMPTS", "INTERESTS", "COMPLETENESS"],
+  "goals": "I want a clear, genuine, professional profile."
+}
+
+2. PROFILE OPTIMIZATION
+{
+  "tone": "WARM_AND_CONFIDENT",
+  "relationshipGoal": "LONG_TERM",
+  "mustKeepStatements": ["I enjoy hiking and live music"],
+  "avoidTopics": ["workplace details"]
+}
+
+3. PHOTO REVIEW
+{
+  "photoIds": ["photo_1", "photo_2", "photo_3"],
+  "permissionConfirmed": true,
+  "reviewAreas": ["ORDER", "LIGHTING", "VARIETY", "COMPOSITION"]
+}
+
+4. BACKGROUND CHECK REQUEST
+{
+  "subjectUserId": "user-id",
+  "subjectConsentRequired": true,
+  "jurisdiction": "US-MD",
+  "verificationVendor": "YOUR_APPROVED_VENDOR"
+}
+
+5. DATE PLANNING
+{
+  "city": "Washington, DC",
+  "dateWindow": "Saturday evening",
+  "budgetCents": 10000,
+  "interests": ["quiet dining", "museum", "live jazz"],
+  "accessibilityNeeds": [],
+  "transportation": "public transit"
+}
+
+6. RELATIONSHIP COACHING
+{
+  "preferredTimes": ["2026-07-22T18:00:00-04:00"],
+  "topic": "communication and expectations",
+  "coachGenderPreference": "NO_PREFERENCE",
+  "acknowledgement": "This is coaching, not therapy."
+}
+
+7. PRIORITY SUPPORT
+{
+  "ticketCategory": "SUBSCRIPTION",
+  "summary": "Billing issue after plan upgrade",
+  "existingTicketId": "optional-ticket-id"
+}
+
+====================================================================
+PRODUCTION SAFETY RULES
+====================================================================
+
+1. Never contact someone who blocked or reported the requester.
+2. Never reveal last-seen status, message-read status, location, phone number,
+   email address, social-media account, or staff-only risk data.
+3. Never imply the recipient is interested before explicit consent.
+4. Never permit repeated outreach inside the pair cooldown window.
+5. Never let staff manually bypass a recipient's opt-out.
+6. Return the credit when staff rejects a request before outreach.
+7. Do not return the credit merely because the recipient declines.
+8. Disable concierge access for suspended or abusive accounts.
+9. Preserve immutable audit logs for every payment, approval, rejection,
+   outreach, response, block, report, and refund.
+10. Use a consent-based approved vendor for background checks.
+11. Do not describe coaching as therapy, treatment, or crisis support.
+12. Add staff training, quality review, and escalation procedures.
+13. Add automatic expiry for unanswered requests.
+14. Rate-limit creation, responses, and staff actions.
+15. Add fraud controls for payment disputes and repeated refunds.
+
+====================================================================
+SCHEDULED EXPIRY JOB
+====================================================================
+
+Run hourly with Vercel Cron, GitHub Actions, a worker, or another scheduler.
+
+FILE: app/api/cron/expire-concierge/route.ts
+
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function POST(request: Request) {
+  const authorization = request.headers.get("authorization");
+
+  if (authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const result = await prisma.conciergeRequest.updateMany({
+    where: {
+      status: "OUTREACH_SENT",
+      expiresAt: { lt: new Date() },
+    },
+    data: {
+      status: "EXPIRED",
+      completedAt: new Date(),
+    },
+  });
+
+  return NextResponse.json({ expired: result.count });
+}
+
+Add to .env:
+CRON_SECRET="replace-with-a-long-random-secret"
+
+====================================================================
+SETUP COMMANDS
+====================================================================
+
+1. Create the project:
+
+npx create-next-app@latest datebuk-concierge --typescript --tailwind --app
+
+2. Enter the project:
+
+cd datebuk-concierge
+
+3. Install dependencies:
+
+npm install @prisma/client prisma stripe zod next-auth
+npm install -D tsx
+
+4. Add the files from this pack.
+
+5. Create .env from .env.example.
+
+6. Start PostgreSQL and create the database:
+
+CREATE DATABASE datebuk;
+
+7. Generate Prisma client:
+
+npx prisma generate
+
+8. Create the first migration:
+
+npx prisma migrate dev --name concierge_services
+
+9. Seed the catalog:
+
+npx tsx prisma/seed.ts
+
+10. Start the application:
+
+npm run dev
+
+11. Configure Stripe webhook locally:
+
+stripe listen --forward-to localhost:3000/api/payments/webhook
+
+12. Copy the returned webhook secret into:
+
+STRIPE_WEBHOOK_SECRET="whsec_..."
+
+13. Test the purchase with Stripe test card:
+
+4242 4242 4242 4242
+Any future expiration date
+Any three-digit CVC
+Any postal code
+
+====================================================================
+ACCEPTANCE TEST CHECKLIST
+====================================================================
+
+USER
+[ ] Free users cannot buy concierge services.
+[ ] Elite and Premium users can buy $20/2-request package.
+[ ] Successful Stripe payment adds exactly two credits once.
+[ ] Duplicate webhook delivery does not add credits twice.
+[ ] One request consumes one credit.
+[ ] Credit is returned when staff rejects before outreach.
+[ ] User cannot request outreach to self.
+[ ] User cannot request outreach to blocked or reporting relationships.
+[ ] User cannot bypass recipient opt-out.
+[ ] Pair cooldown is enforced.
+[ ] Monthly tier limit is enforced.
+[ ] Request messages reject off-platform contact information.
+
+RECIPIENT
+[ ] Recipient receives a neutral message only after staff approval.
+[ ] Recipient can accept, reply, postpone, decline, block, opt out, or report.
+[ ] Blocking prevents future concierge requests.
+[ ] Opt-out prevents all future concierge requests.
+[ ] Reporting creates a safety case.
+
+STAFF
+[ ] Staff sees pending requests.
+[ ] Staff can approve, reject, send outreach, close, or refund credit.
+[ ] Staff cannot send outreach before approval.
+[ ] Rejection returns a consumed credit.
+[ ] Every staff action is audited.
+
+ADMIN
+[ ] Admin can view analytics.
+[ ] Admin can update service prices and eligibility.
+[ ] Revenue is based only on paid payments.
+[ ] Service catalog supports all business ideas.
+[ ] Suspended users cannot use the module.
+
+SECURITY
+[ ] Webhook signature is verified.
+[ ] All server routes re-check authorization.
+[ ] Role checks do not rely only on the UI.
+[ ] Secrets are never committed.
+[ ] Production rate limiter uses shared storage.
+[ ] Logs avoid sensitive message content where possible.
+[ ] Background checks require explicit subject consent.
+[ ] Data retention and deletion rules are documented.
+
+====================================================================
+END OF PACK
+====================================================================

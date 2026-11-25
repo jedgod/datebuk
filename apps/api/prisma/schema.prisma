@@ -1,0 +1,1516 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  SUPPORT
+  SUPERADMIN
+}
+
+enum StaffAccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  ESCALATED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum OtpMethod {
+  TOTP
+  EMAIL
+}
+
+enum GenderEnum {
+  MALE
+  FEMALE
+  NON_BINARY
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum GenderPreferenceEnum {
+  MEN
+  WOMEN
+  EVERYONE
+}
+
+enum DatingIntentEnum {
+  FAITH
+  CASUAL
+  PROFESSIONAL
+  OPEN_MINDED
+}
+
+enum ProfileVisibilityEnum {
+  HIDDEN
+  LOW
+  NORMAL
+  BOOSTED
+}
+
+enum ModerationStatusEnum {
+  PENDING
+  APPROVED
+  QUARANTINED
+  REJECTED
+  INTERRUPTED
+  DELETED
+}
+
+enum TrustLevelEnum {
+  NEW
+  LOW
+  MEDIUM
+  HIGH
+  BANNED
+}
+
+enum ViolationTypeEnum {
+  NUDITY
+  EXPLICIT_AUDIO
+  HARASSMENT
+  SPAM
+  SCAM
+  FAKE_PROFILE
+  OTHER
+  // Added for the general user-safety report flow (block/report on matches, messages,
+  // and calls) — the values above were video-moderation-specific.
+  INAPPROPRIATE
+  SAFETY_CONCERN
+  UNDERAGE_CONCERN
+  EMERGENCY
+}
+
+enum ReportStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Canonical, platform-wide tier taxonomy — FREE / PREMIUM / ELITE.
+// Previously this enum used FREE/PREMIUM_BASIC/PREMIUM_PLUS/VIP while the
+// Stripe-linked SubscriptionTier table used FREE/PREMIUM/ELITE, forcing three
+// separate copies of fuzzy string-matching normalizers across the codebase
+// to reconcile the two vocabularies. See migration
+// unify_subscription_tier_taxonomy for the data backfill (PREMIUM_BASIC and
+// PREMIUM_PLUS both collapse to PREMIUM; VIP becomes ELITE).
+enum SubscriptionTierEnum {
+  FREE
+  PREMIUM
+  ELITE
+}
+
+enum ConciergeRequestStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  OUTREACH_SENT
+  RECIPIENT_INTERESTED
+  RECIPIENT_DECLINED
+  EXPIRED
+  CANCELLED
+  CLOSED
+}
+
+enum ConciergeResponseType {
+  INTERESTED
+  REPLY_NOW
+  MAYBE_LATER
+  NOT_INTERESTED
+  BLOCK_REQUESTER
+  OPT_OUT
+  REPORT
+}
+
+enum ConciergeServiceType {
+  CONCIERGE_OUTREACH_PACKAGE
+  PROFILE_REVIEW
+  PROFILE_OPTIMIZATION
+  PHOTO_REVIEW
+  BACKGROUND_CHECK_REQUEST
+  DATE_PLANNING
+  RELATIONSHIP_COACHING
+  PRIORITY_SUPPORT
+}
+
+enum ConciergeOrderStatus {
+  PENDING_PAYMENT
+  PAID
+  ASSIGNED
+  IN_PROGRESS
+  AWAITING_MEMBER
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  emailVerified Boolean @default(false)
+  isAdmin   Boolean @default(false)
+  role      UserRole @default(USER)
+
+  // Dating Profile Fields
+  displayName       String?
+  fullName          String?
+  gender            GenderEnum?
+  genderPreference  GenderPreferenceEnum?
+  datingIntent      DatingIntentEnum @default(CASUAL)
+  age               Int?
+  // Source of truth for the age gate at signup (see AuthService.signup) —
+  // `age` above is a derived display cache, recomputed at signup time from
+  // this value and never trusted as raw client input.
+  dateOfBirth       DateTime?
+  locationCity      String?
+  locationState     String?
+  locationCountry   String @default("US")
+  bio               String?
+  interests         String[] @default([])
+  photos            String[] @default([])
+  // Collected at signup (web SignUpFlow / mobile SignUpScreen).
+  sexualOrientation String?
+  relationshipGoal  String?
+  heightCm          Int?
+  // Mobile number the ID-verification link is texted to (E.164). Not shown to other users.
+  phoneE164         String?
+  // Set only when ID document + selfie face match was accepted (see IdentityService).
+  identityVerifiedAt DateTime?
+  identityVerifications IdentityVerification[]
+
+  // Trust & Safety
+  trustScore        Int @default(0)
+  trustLevel        TrustLevelEnum @default(NEW)
+  visibility        ProfileVisibilityEnum @default(NORMAL)
+  verifiedEmail     Boolean @default(false)
+  verifiedVideo     Boolean @default(false)
+  recentFlagsCount  Int @default(0)
+  positiveReports   Int @default(0)
+  negativeReports   Int @default(0)
+  videoApproved     Boolean @default(false)
+  
+  // Subscription
+  subscriptionTier  SubscriptionTierEnum @default(FREE)
+  subscriptionExpiresAt DateTime?
+  subscription        UserSubscription?    @relation("UserSubscriptions")
+  invoices            SubscriptionInvoice[]
+  conciergeOptOut     Boolean               @default(false)
+  conciergeWallet     ConciergeWallet?
+  conciergeRequestsMade ConciergeRequest[]  @relation("ConciergeRequester")
+  conciergeRequestsReceived ConciergeRequest[] @relation("ConciergeRecipient")
+  conciergeRequestsAssigned ConciergeRequest[] @relation("ConciergeStaff")
+  conciergeMessages   ConciergeMessage[]
+  conciergeBlocksMade ConciergeBlock[]      @relation("ConciergeBlocker")
+  conciergeBlocksReceived ConciergeBlock[]  @relation("ConciergeBlocked")
+  conciergeServiceOrders ConciergeServiceOrder[] @relation("ConciergeOrderMember")
+  conciergeOrdersAssigned ConciergeServiceOrder[] @relation("ConciergeOrderStaff")
+
+  // Staff Management Fields
+  staffProfile    StaffProfile?
+  staffRoles      StaffRole[]
+  twoFactorAuth   TwoFactorAuth?
+  tasksAssigned   Task[]          @relation("AssignedBy")
+  tasksOwned      Task[]          @relation("AssignedTo")
+  activityLogs    StaffActivityLog[] @relation("StaffActor")
+  sessionTokens   SessionToken[]
+  
+  // Staff Lifecycle
+  mustChangePassword Boolean @default(false)
+  accountStatus      StaffAccountStatus @default(PENDING)
+  tempPasswordHash   String?
+  passwordChangedAt  DateTime?
+  lastLoginAt        DateTime?
+  lastLoginIp        String?
+
+  // Hardening: lockout escalation
+  failedLoginCount Int @default(0)
+  lockoutUntil     DateTime?
+  lockoutCount     Int @default(0)
+
+  // Device fingerprinting & trust
+  deviceFingerprints String[]
+  trustedDevices String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastActiveAt DateTime?
+  deletedAt DateTime?
+
+  profile   Profile?
+  sessions  Session[]
+  emailVerifications EmailVerificationToken[]
+  passwordResets PasswordResetToken[]
+  pushSubscriptions PushSubscription[]
+  mobileCallTokens MobileCallToken[]
+  auditLogs  AuditLog[] @relation("ActorLogs")
+  ipLogs     IpLog[] @relation("IpLogs")
+  fraudEvents FraudEvent[] @relation("FraudEvents")
+  videoModerationItems VideoModerationItem[]
+  experiments ExperimentAssignment[] @relation("Experiments")
+
+  sentLikes     Like[]  @relation("SentLikes")
+  receivedLikes Like[]  @relation("ReceivedLikes")
+  matchesAsUser1 Match[] @relation("User1Matches")
+  matchesAsUser2 Match[] @relation("User2Matches")
+  messages  Message[]
+  notifications Notification[]
+  settings      UserSettings?
+  verificationRequests VerificationRequest[]
+  videos        Video[]  @relation("UserVideos")
+  
+  // Dating & Moderation
+  reportedByUsers Report[] @relation("ReportedByUser")
+  reportedUsers Report[] @relation("ReportedUser")
+  blocksMade    Block[]  @relation("BlockerUser")
+  blocksReceived Block[] @relation("BlockedUser")
+  flags         Flag[]
+  subscriptions Subscription[]
+  moderationLogs ModerationLog[] @relation("ModerationLogs")
+  quarantinedVideos QuarantinedVideo[]
+  filterPresets FilterPreset[]
+
+  @@index([accountStatus])
+  @@index([role])
+  @@index([email])
+  @@index([trustScore])
+  @@index([visibility])
+  @@index([datingIntent])
+}
+
+model UserSubscription {
+  id                      String               @id @default(uuid())
+  userId                  String               @unique
+  tierName                String
+  stripeSubscriptionId    String?              @unique
+  status                  String               @default("active")
+  currentPeriodStart      DateTime?
+  currentPeriodEnd        DateTime?
+  cancelAtPeriodEnd       Boolean              @default(false)
+  canceledAt              DateTime?
+  trialEnd                DateTime?
+  paymentMethodLast4      String?
+  paymentMethodType       String?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+
+  user                    User                 @relation("UserSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
+  tier                    SubscriptionTier     @relation(fields: [tierName], references: [tierName])
+  invoices                SubscriptionInvoice[]
+
+  @@index([tierName])
+}
+
+model SubscriptionTier {
+  tierName                String               @id
+  displayName             String
+  priceMonthly            Float?
+  priceYearly             Float?
+  description             String?
+  stripePriceId           String?
+  stripePriceIdYear       String?
+  isActive                Boolean              @default(true)
+  createdAt               DateTime             @default(now())
+
+  userSubscriptions       UserSubscription[]
+  features                SubscriptionFeature[]
+}
+
+model SubscriptionFeature {
+  id                      String               @id @default(uuid())
+  tierName                String
+  featureName             String
+  featureValue            String?
+  isEnabled               Boolean              @default(true)
+  displayOrder            Int                  @default(0)
+
+  tier                    SubscriptionTier     @relation(fields: [tierName], references: [tierName], onDelete: Cascade)
+
+  @@unique([tierName, featureName])
+  @@index([tierName])
+}
+
+model SubscriptionInvoice {
+  id                      String               @id @default(uuid())
+  userId                  String
+  subscriptionId          String?
+  stripeInvoiceId         String?              @unique
+  amountPaid              Float?
+  amountDue               Float?
+  status                  String
+  invoicePdfUrl           String?
+  hostedInvoiceUrl        String?
+  periodStart             DateTime?
+  periodEnd               DateTime?
+  createdAt               DateTime             @default(now())
+
+  // Restrict, not Cascade: invoice/billing history is a financial audit
+  // trail that should outlive a deleted account, not be purged with it. A
+  // real account-deletion flow should anonymize the User row instead of
+  // hard-deleting it.
+  user                    User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  subscription            UserSubscription?    @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId])
+  @@index([subscriptionId])
+}
+
+model ConciergeWallet {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  availableCredits  Int      @default(0)
+  lifetimePurchased Int      @default(0)
+  lifetimeUsed      Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ConciergeRequest {
+  id                String                  @id @default(uuid())
+  requesterId       String
+  recipientId       String
+  staffId           String?
+  status            ConciergeRequestStatus @default(PENDING_REVIEW)
+  reason            String
+  requesterMessage  String
+  staffMessage      String?
+  staffNotes        String?
+  recipientResponse ConciergeResponseType?
+  recipientMessage  String?
+  creditConsumed    Boolean                 @default(true)
+  outreachSentAt    DateTime?
+  respondedAt       DateTime?
+  expiresAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  requester User @relation("ConciergeRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient User @relation("ConciergeRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  staff     User? @relation("ConciergeStaff", fields: [staffId], references: [id], onDelete: SetNull)
+  messages  ConciergeMessage[]
+
+  @@index([requesterId, createdAt])
+  @@index([recipientId, createdAt])
+  @@index([status, createdAt])
+  @@index([staffId, status])
+}
+
+model ConciergeMessage {
+  id        String   @id @default(uuid())
+  requestId String
+  senderId  String?
+  senderRole String
+  content   String
+  internal  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  request ConciergeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  sender  User? @relation(fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt])
+}
+
+model ConciergeBlock {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("ConciergeBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("ConciergeBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+model ConciergeServiceCatalog {
+  id               String               @id @default(uuid())
+  type             ConciergeServiceType @unique
+  name             String
+  shortDescription String
+  fullDescription  String
+  priceCents       Int
+  currency         String               @default("usd")
+  includedUnits    Int?
+  active           Boolean              @default(true)
+  premiumEligible  Boolean              @default(true)
+  eliteEligible    Boolean              @default(true)
+  freeEligible     Boolean              @default(false)
+  turnaroundHours  Int?
+  sortOrder        Int                  @default(0)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  orders ConciergeServiceOrder[]
+}
+
+model ConciergeServiceOrder {
+  id               String               @id @default(uuid())
+  memberId         String
+  serviceCatalogId String
+  assignedStaffId  String?
+  status           ConciergeOrderStatus @default(PENDING_PAYMENT)
+  intakeJson       Json?
+  deliveryJson     Json?
+  memberNotes      String?
+  staffNotes       String?
+  amountCents      Int
+  currency         String               @default("usd")
+  dueAt            DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  member        User @relation("ConciergeOrderMember", fields: [memberId], references: [id], onDelete: Cascade)
+  assignedStaff User? @relation("ConciergeOrderStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  service       ConciergeServiceCatalog @relation(fields: [serviceCatalogId], references: [id])
+
+  @@index([memberId, createdAt])
+  @@index([status, createdAt])
+  @@index([assignedStaffId, status])
+}
+
+model Session {
+  id            String   @id @default(uuid())
+  userId        String
+
+  // Token optimization:
+  // refresh token = "<refreshTokenId>.<secret>"
+  // - refreshTokenId is short + indexed for cheap lookup
+  // - secret is verified via SHA-256 HMAC (pepper) for fast compare
+  refreshTokenId String  @unique
+  refreshSecretHash String
+
+  rotatedAt     DateTime?
+  replacedBySessionId String?
+  reuseDetectedAt DateTime?
+  revokedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  userAgent     String?
+  ip            String?
+
+  // Absolute session lifetime, set at issuance and never extended by rotation. Bounds how
+  // long a stolen refresh token stays usable, independent of the sliding rotation window.
+  // Nullable so pre-existing rows created before this field don't need a backfill; every
+  // session created after this migration always gets one.
+  expiresAt     DateTime?
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  // Indexed lookup key for the new "<tokenId>.<secret>" format (HMAC-hashed secret,
+  // O(1) lookup) alongside the legacy bcrypt-hashed single-opaque-token rows (nullable,
+  // O(n) fallback scan) issued before this field existed. Legacy rows age out via their
+  // normal short expiry, so no backfill is needed.
+  tokenId   String?  @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  tokenId   String?  @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+}
+
+model MobileCallToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  platform  String
+  provider  String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  actorUserId String?
+  targetUserId String?
+  ip        String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  // Cross-references this entry to the specific HTTP request that produced it (see
+  // RequestIdMiddleware + AsyncLocalStorage-based request-context.ts) — previously
+  // AuditLog rows couldn't be tied back to a request at all.
+  requestId String?
+  // Tamper-evidence: hash covers this row's own content plus the previous row's hash,
+  // so deleting or editing any entry breaks the chain from that point forward in a way a
+  // periodic integrity check can detect. Best-effort, not full tamper-proofing — see
+  // AuditService's own comments for the concurrency caveat.
+  hash         String?
+  previousHash String?
+
+  actor     User? @relation("ActorLogs", fields: [actorUserId], references: [id], onDelete: SetNull)
+  @@index([actorUserId])
+  @@index([targetUserId])
+  @@index([createdAt])
+  @@index([requestId])
+}
+
+model SecurityAlert {
+  id             String    @id @default(uuid())
+  ruleId         String    // e.g. "REPEATED_MFA_FAILURES", "MASS_AUDIT_EXPORT"
+  severity       String    // low, medium, high, critical
+  summary        String
+  actorUserId    String?
+  targetUserId   String?
+  evidence       Json?
+  status         String    @default("open") // open, acknowledged, resolved
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+
+  @@index([status])
+  @@index([severity])
+  @@index([ruleId])
+  @@index([actorUserId])
+  @@index([createdAt])
+}
+
+model Profile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  displayName String
+  age         Int      @default(18)
+  gender      String   @default("prefer_not_to_say")
+  bio         String?
+  photos      String[]
+  voiceIntroKey String?
+  location    Json?
+  interests   String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Video {
+  id            String   @id @default(uuid())
+  userId        String
+  filename      String
+  url           String   // S3 or cloud storage URL
+  durationSec   Int      @default(0)
+  
+  // AI Analysis Scores
+  aiScores      Json?    // { nudity, explicitAudio, harassment, spam, overall, duration }
+  status        String   @default("PENDING")  // APPROVED, PENDING, QUARANTINED, REJECTED
+  
+  uploadedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  user          User     @relation("UserVideos", fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([status])
+  @@index([uploadedAt])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  fromId    String
+  toId      String
+  createdAt DateTime @default(now())
+
+  // Restrict, matching the constraint actually applied by the initial
+  // migration (20260211033522_init) — this schema previously declared no
+  // onDelete here at all, which is undocumented drift from what's live.
+  // Deleting a user with any like history requires the app layer to delete
+  // their Likes first (or, for a real account-deletion flow, anonymize the
+  // User row rather than hard-deleting it) — see the same note on Match/
+  // Message below.
+  from      User     @relation("SentLikes", fields: [fromId], references: [id], onDelete: Restrict)
+  to        User     @relation("ReceivedLikes", fields: [toId], references: [id], onDelete: Restrict)
+
+  @@unique([fromId, toId])
+  @@index([fromId])
+  @@index([toId])
+}
+
+model Match {
+  id        String   @id @default(uuid())
+  user1Id   String
+  user2Id   String
+  intent    DatingIntentEnum?
+  lastMessageAt DateTime?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // Restrict, matching the constraint actually applied by the initial
+  // migration — this schema previously (incorrectly) documented Cascade
+  // here, which did not match what's live and would have silently started
+  // deleting match history on the next `prisma migrate dev` run. A real
+  // account-deletion flow should anonymize the User row rather than
+  // hard-deleting it, so the other party's match/message history survives.
+  user1     User     @relation("User1Matches", fields: [user1Id], references: [id], onDelete: Restrict)
+  user2     User     @relation("User2Matches", fields: [user2Id], references: [id], onDelete: Restrict)
+
+  messages  Message[]
+  videoSessions VideoSession[]
+  reports   Report[]
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  matchId   String
+  senderId  String
+  content   String
+  attachments Json?
+  deliveredAt DateTime?
+  readAt    DateTime?
+  sentAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  // Restrict, matching the constraint actually applied by the initial
+  // migration — previously documented here as Cascade, which did not match
+  // live behavior. See the note on Match above.
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([matchId])
+  @@index([senderId])
+}
+
+enum NotificationType {
+  MATCH
+  MESSAGE
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  relatedId String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, read])
+}
+
+model UserSettings {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  notifyPush            Boolean  @default(true)
+  notifyEmail           Boolean  @default(true)
+  notifyMessages        Boolean  @default(true)
+  privacyProfileVisible Boolean  @default(true)
+  privacyShowDistance   Boolean  @default(true)
+  privacyShowAge        Boolean  @default(true)
+  realtimeEnabled       Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationRequest {
+  id              String   @id @default(uuid())
+  userId          String
+  photoKey        String
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED, ESCALATED
+  submittedAt     DateTime @default(now())
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  rejectionReason String?
+  // Explicit consent captured at submission — a checkbox, not implied by the act of
+  // uploading a photo.
+  consentedAt     DateTime?
+  // Set when a reviewer escalates a request to ESCALATED instead of approving/rejecting
+  // it outright. The staff member who finalizes an escalated request (approve/reject)
+  // must be someone other than firstReviewerId — see VerificationService.review().
+  firstReviewerId String?
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([submittedAt])
+}
+
+model SupportTicket {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  issueType String
+  message   String
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Advanced Security Features
+model IpLog {
+  id          String   @id @default(uuid())
+  ip          String
+  userId      String?
+  userAgent   String?
+  geoCountry  String?
+  geoCity     String?
+  isVpnSuspect Boolean  @default(false)
+  riskScore   Int?
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation("IpLogs", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([ip])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model IpBlacklist {
+  id        String   @id @default(uuid())
+  ip        String   @unique
+  blocked   Boolean  @default(true)
+  reason    String?
+  severity  String   @default("medium") // low, medium, high, critical
+  addedAt   DateTime @default(now())
+  expiresAt DateTime?
+  addedBy   String?  // admin ID who added it
+
+  @@index([ip])
+  @@index([blocked])
+}
+
+model IpIntelCache {
+  id        String   @id @default(uuid())
+  ip        String   @unique
+  intel     Json     // Cached IP intelligence data
+  cachedAt  DateTime @default(now())
+  expiresAt DateTime?
+
+  @@index([ip])
+}
+
+model FraudEvent {
+  id              String   @id @default(uuid())
+  userId          String?
+  ip              String?
+  eventType       String   // signup, login, payment, etc
+  riskScore       Int
+  riskLevel       String   // low, medium, high, critical
+  details         Json     // Context about the event
+  decisionApplied String?  // block, challenge, allow
+  challengeMethod String?  // sms, email, etc
+  resolved        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  user            User?                @relation("FraudEvents", fields: [userId], references: [id], onDelete: SetNull)
+  feedback        FraudFeedback?
+  explanation     FraudExplanation?
+  moderationQueue ModeratorQueue?
+
+  @@index([userId])
+  @@index([ip])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([resolved])
+}
+
+model FraudFeedback {
+  id          String   @id @default(uuid())
+  fraudEventId String  @unique
+  feedback    String   // "legitimate", "fraud", "unsure"
+  confidence  Int      @default(100) // 0-100
+  reason      String?
+  providedBy  String?  // admin or system
+  providedAt  DateTime @default(now())
+
+  fraudEvent  FraudEvent @relation(fields: [fraudEventId], references: [id], onDelete: Cascade)
+
+  @@index([fraudEventId])
+}
+
+model FraudExplanation {
+  id          String   @id @default(uuid())
+  fraudEventId String  @unique
+  factors     Json     // Risk factors that contributed
+  sources     Json     // Where signals came from
+  modelScore  Float?   // ML model confidence
+  explanation String?  // Human-readable explanation
+  createdAt   DateTime @default(now())
+
+  fraudEvent  FraudEvent @relation(fields: [fraudEventId], references: [id], onDelete: Cascade)
+
+  @@index([fraudEventId])
+}
+
+model ModeratorQueue {
+  id            String   @id @default(uuid())
+  fraudEventId  String   @unique
+  userId        String?
+  reason        String   // Why it needs moderation
+  status        String   @default("pending") // pending, approved, rejected, escalated
+  priority      Int      @default(0)
+  assignedTo    String?  // Moderator ID
+  notes         String?
+  reviewedAt    DateTime?
+  reviewedBy    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  fraudEvent    FraudEvent @relation(fields: [fraudEventId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([priority])
+  @@index([assignedTo])
+}
+
+model SecurityMetric {
+  id          String   @id @default(uuid())
+  metric      String   // risk_avg, fraud_rate, etc
+  value       Float
+  dimension   String?  // time period, country, etc
+  recordedAt  DateTime @default(now())
+
+  @@index([metric])
+  @@index([recordedAt])
+}
+
+model VideoModerationItem {
+  id        String   @id @default(uuid())
+  userId    String
+  videoId   String
+
+  status    String   @default("pending") // pending, in_review, approved, flagged, escalated
+  severity  String   @default("medium")  // low, medium, high, critical
+  riskScore Int      @default(0)
+  riskLevel String   @default("low")
+
+  flagReason String  // nudity, explicit_audio, harassment, violence, spam, underage, other
+  reportCount Int    @default(0)
+  isLive    Boolean  @default(false)
+
+  userIntent String  @default("casual")
+  userTrustLevel String @default("medium") // new, low, medium, high
+
+  aiScores   Json?
+  keyframes  String[]
+  audioWaveform Int[]
+  violationTimestamps Int[]
+  recentMessages Json?
+  matchDetails Json?
+
+  flaggedAt DateTime @default(now())
+  reviewedAt DateTime?
+  reviewedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([severity])
+  @@index([riskScore])
+  @@index([flaggedAt])
+}
+
+model ExperimentAssignment {
+  id          String   @id @default(uuid())
+  userId      String
+  experimentId String
+  variant     String   // control, treatment_a, treatment_b, etc
+  assignment  Json?    // Additional variant config
+  createdAt   DateTime @default(now())
+
+  user        User     @relation("Experiments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, experimentId])
+  @@index([experimentId])
+}
+
+// ============================================================================
+// STAFF MANAGEMENT SYSTEM
+// ============================================================================
+
+model StaffProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  displayName       String
+  department        String?
+  jobTitle          String?
+  phoneNumber       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  key       String   @unique // e.g., "assign_tasks", "view_fraud", "ban_user", "revoke_staff"
+  name      String
+  category  String   // e.g., "task_management", "security", "staff_management"
+  description String?
+  createdAt DateTime @default(now())
+
+  roles     RolePermission[]
+
+  @@index([category])
+}
+
+model Role {
+  id        String   @id @default(uuid())
+  name      String   @unique // e.g., "MANAGER", "SUPPORT_AGENT", "ADMIN"
+  description String?
+  isSystem  Boolean  @default(false) // Cannot be deleted if true
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  permissions RolePermission[]
+  staffMembers StaffRole[]
+
+  @@index([name])
+}
+
+model RolePermission {
+  id          String @id @default(uuid())
+  roleId      String
+  permissionId String
+
+  role        Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission  Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model StaffRole {
+  id        String   @id @default(uuid())
+  userId    String
+  roleId    String
+  assignedAt DateTime @default(now())
+  assignedBy String? // admin ID who assigned
+
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model TwoFactorAuth {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  secret          String?  // TOTP secret (encrypted)
+  backupCodes     String[] // Encrypted backup codes
+  method          OtpMethod @default(TOTP)
+  enabled         Boolean  @default(false)
+  enabledAt       DateTime?
+  lastUsedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Task {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  status      TaskStatus @default(PENDING)
+  priority    TaskPriority @default(MEDIUM)
+  
+  assignedToId String
+  assignedById String?
+  dueAt       DateTime?
+  
+  completedAt DateTime?
+  escalatedAt DateTime?
+  escalatedTo String?
+  
+  notes       String?
+  metadata    Json?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assignedTo  User @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: Cascade)
+  assignedBy  User? @relation("AssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([assignedToId])
+  @@index([assignedById])
+  @@index([status])
+  @@index([priority])
+  @@index([dueAt])
+}
+
+model StaffActivityLog {
+  id          String   @id @default(uuid())
+  staffId     String
+  action      String   // "login", "otp_failure", "task_completed", "user_banned", "data_export"
+  target      String?  // What was affected (user ID, task ID, etc)
+  ip          String?
+  userAgent   String?
+  details     Json?    // Additional context
+  createdAt   DateTime @default(now())
+
+  actor       User     @relation("StaffActor", fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model SessionToken {
+  id                String   @id @default(uuid())
+  userId            String
+  refreshTokenHash  String   @unique
+  accessTokenHash   String?
+  
+  isValid           Boolean  @default(true)
+  revokedAt         DateTime?
+  lastUsedAt        DateTime?
+  
+  ip                String?
+  userAgent         String?
+  
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isValid])
+  @@index([expiresAt])
+}
+
+// Video Session & Moderation Models
+model VideoSession {
+  id                String   @id @default(uuid())
+  matchId           String
+  startedAt         DateTime
+  endedAt           DateTime?
+  durationSeconds   Int      @default(0)
+  status            ModerationStatusEnum @default(PENDING)
+  aiScores          Json?    // { nudity, explicit_audio, overall }
+  reportsCount      Int      @default(0)
+  interruptedAt     DateTime?
+  interruptionReason String?
+  reviewedAt        DateTime?
+  escalatedAt       DateTime?
+  priority          String?  // "high", "normal", "low"
+  lastMessageSnippet String?
+  users             String[] // JSON array of user IDs participating
+  createdAt         DateTime @default(now())
+
+  match             Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  reports           Report[]
+  flags             Flag[]
+  moderationLogs    ModerationLog[]
+
+  @@index([matchId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([reviewedAt])
+  @@index([escalatedAt])
+}
+
+model Report {
+  id                String   @id @default(uuid())
+  reporterId        String
+  reportedId        String
+  sessionId         String?
+  matchId           String?
+  reason            ViolationTypeEnum
+  details           String?
+  reportedAt        DateTime @default(now())
+  handledAt         DateTime?
+  outcome           String?  // APPROVED, REJECTED, FURTHER_REVIEW — legacy video-moderation field, unused by the general report flow below
+  createdAt         DateTime @default(now())
+
+  // General user-safety report flow (block/report on matches, messages, calls).
+  status            ReportStatus   @default(OPEN)
+  severity          ReportSeverity @default(LOW)
+  // Snapshot of the recent conversation at report time, independent of the live
+  // Message table, so evidence survives even if messages are later edited/deleted.
+  conversationSnapshot Json?
+  alsoBlocked       Boolean  @default(false)
+  resolvedBy        String?
+  resolvedAt        DateTime?
+  resolutionNote    String?
+
+  // Restrict, not Cascade: reports are trust-and-safety evidence that must
+  // survive deletion of either party's account (e.g. a banned/deleted
+  // offender's report history), not disappear with it.
+  reporter          User     @relation("ReportedByUser", fields: [reporterId], references: [id], onDelete: Restrict)
+  reported          User     @relation("ReportedUser", fields: [reportedId], references: [id], onDelete: Restrict)
+  session           VideoSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  match             Match?   @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@index([reporterId])
+  @@index([reportedId])
+  @@index([sessionId])
+  @@index([reason])
+  @@index([createdAt])
+  @@index([status])
+  @@index([severity])
+}
+
+model Block {
+  id         String   @id @default(uuid())
+  blockerId  String
+  blockedId  String
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  blocker    User     @relation("BlockerUser", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked    User     @relation("BlockedUser", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+model Flag {
+  id                String   @id @default(uuid())
+  userId            String
+  sessionId         String?
+  type              ViolationTypeEnum
+  aiScore           Float    @default(0)
+  flaggedAt         DateTime @default(now())
+  resolved          Boolean  @default(false)
+  resolution        String?  // APPROVED, REJECTED, CAUTION
+  createdAt         DateTime @default(now())
+
+  // Restrict, not Cascade: flags are moderation evidence and must survive
+  // deletion of the flagged user's account.
+  user              User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  session           VideoSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([type])
+  @@index([resolved])
+  @@index([createdAt])
+}
+
+model ModerationLog {
+  id                String   @id @default(uuid())
+  userId            String
+  sessionId         String?
+  action            String   // "reviewed", "approved", "rejected", "escalated", "user_warned"
+  reason            String?
+  adminNotes        String?
+  decisionDetails   Json?
+  createdAt         DateTime @default(now())
+
+  // Restrict, not Cascade: moderation history is an audit trail and must
+  // survive deletion of the moderated user's account.
+  user              User     @relation("ModerationLogs", fields: [userId], references: [id], onDelete: Restrict)
+  session           VideoSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Subscription {
+  id                String   @id @default(uuid())
+  userId            String
+  tier              SubscriptionTierEnum
+  status            String   @default("active") // active, canceled, expired
+  currentPeriodStart DateTime
+  currentPeriodEnd  DateTime
+  canceledAt        DateTime?
+  createdAt         DateTime @default(now())
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tier])
+  @@index([status])
+  @@index([currentPeriodEnd])
+}
+
+model QuarantinedVideo {
+  id                String   @id @default(uuid())
+  videoId           String
+  userId            String
+  severity          Int      @default(0)
+  priority          String   @default("P3") // P0-P5 priority levels
+  nudityScore       Int      @default(0)
+  audioScore        Int      @default(0)
+  reason            String?
+  chatContext       String?
+  keyframeUrls      String[] // JSON array of S3 URLs
+  waveformUrl       String?
+  waveformPeaks     Int[]    @default([]) // JSON array of audio peak data
+  durationSeconds   Int      @default(0)
+  status            String   @default("quarantined") // quarantined, released, deleted, escalated
+  moderatorNotes    String?
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  deletedBy         String?
+  deletedAt         DateTime?
+  deletionReason    String?
+  escalatedBy       String?
+  escalatedAt       DateTime?
+  escalationReason  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Restrict, not Cascade: quarantined-content records are moderation/legal
+  // evidence and must survive deletion of the uploader's account.
+  user              User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([status])
+  @@index([severity])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+model FilterPreset {
+  id                String   @id @default(uuid())
+  userId            String
+  name              String
+  filters           Json     // Store filter configuration as JSON
+  isDefault         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isDefault])
+}
+
+// Backs apps/web's /api/admin/video-date/settings route, which previously
+// held every settings category (followup, icebreaker, safety, location,
+// reflection, readiness, subscription, system) in an in-memory object with
+// an explicit "TODO: Implement database save" — GET always returned the
+// same hardcoded defaults and POST silently discarded whatever was saved.
+// One row per settings category, value shape is category-specific (hence
+// Json) — see VIDEO_DATE_SETTINGS_TYPES in the route for the valid `type`
+// values.
+model VideoDateSetting {
+  type      String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+
+// ID document + selfie verification. Raw images are processed in memory and never stored;
+// only the non-sensitive outcome is kept here.
+model IdentityVerification {
+  id               String   @id @default(uuid())
+  userId           String
+  channel          String   // SMS_WEB (texted link, opened on the phone) | MOBILE_APP (in-app)
+  // PENDING_CAPTURE -> PROCESSING -> APPROVED | REJECTED | EXPIRED
+  status           String   @default("PENDING_CAPTURE")
+  // SHA-256 of the one-time capture token embedded in the texted link; the raw token is never stored.
+  tokenHash        String   @unique
+  tokenExpiresAt   DateTime
+  phoneLast4       String?
+  // Liveness challenge the selfie must satisfy: LOOK_LEFT | LOOK_RIGHT
+  challenge        String
+  attempts         Int      @default(0)
+  consentedAt      DateTime
+  // Outcome details (no document number, no raw name/DOB stored)
+  docType          String?
+  docExpired       Boolean?
+  ageOk            Boolean?
+  dobMatches       Boolean?
+  nameMatches      Boolean?
+  faceSimilarity   Float?
+  livenessPassed   Boolean?
+  decisionReason   String?
+  createdAt        DateTime @default(now())
+  completedAt      DateTime?
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+
+
+// ---- Subscription feature access (ported from the DSACS reference pack) ----------------
+// Daily per-feature usage counters (UTC day). The plan itself is NOT stored here: it is
+// derived from UserSubscription/User.subscriptionTier by SubscriptionsService.getAccessTier.
+model FeatureUsage {
+  userId  String
+  feature String
+  day     DateTime @db.Date
+  count   Int
+
+  @@id([userId, feature, day])
+  @@index([day])
+}
+
+// Idempotency ledger: replaying the same requestId returns the stored result and never
+// consumes quota twice; reusing a requestId with a different payload is rejected.
+model FeatureOperation {
+  userId      String
+  requestId   String
+  feature     String
+  payloadHash String
+  result      Json
+  createdAt   DateTime @default(now())
+
+  @@id([userId, requestId])
+}
+
+// Admin kill switch: a listed feature is denied for everyone (safety features excepted).
+model DisabledFeature {
+  feature    String   @id
+  disabledBy String?
+  createdAt  DateTime @default(now())
+}
+
+// ---- SMS provider (ported from the DCG reference pack, single DateBuk account) ---------
+model TwilioAccount {
+  id                 String   @id @default(uuid())
+  name               String
+  accountSid         String   @unique
+  // pending -> verified -> active; active <-> rotating (during credential swap);
+  // suspended (manual or automatic on auth failure); revoked is terminal.
+  // At most ONE account is active at a time (partial unique index), so a suspended or failing
+  // account is never silently replaced by another one.
+  status             String   @default("pending")
+  statusReason       String?
+  // Credentials, AES-256-GCM via the DCG credential vault (versioned). The Auth Token is also
+  // what Twilio signs webhooks with, so webhooks can't be verified for API-key-only accounts.
+  encryptedAuthToken String?
+  apiKeySid          String?
+  encryptedApiKeySecret String?
+  keyVersion         Int      @default(0)   // 0 = legacy (encrypted with TOTP_ENCRYPTION_KEY)
+  lastValidatedAt    DateTime?
+  rotatedAt          DateTime?
+  // Spending controls (SMS segments). null = no cap.
+  dailySegmentLimit   Int?
+  monthlySegmentLimit Int?
+  // Destination restriction: E.164 prefixes messages may be sent to, e.g. {"+1"}.
+  allowedPrefixes    String[] @default(["+1"])
+  createdBy          String?
+  createdAt          DateTime @default(now())
+  senders            TwilioSender[]
+}
+
+model TwilioSender {
+  id                  String   @id @default(uuid())
+  accountId           String
+  senderNumber        String?  // E.164 number owned by the account
+  messagingServiceSid String?  // MG... service owned by the account (exactly one of the two)
+  enabled             Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  account             TwilioAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+// Numbers that replied STOP; no message is sent to them until they reply START.
+model SmsSuppression {
+  phone     String   @id
+  createdAt DateTime @default(now())
+}
+
+model SmsMessage {
+  id            String   @id @default(uuid())
+  accountId     String?
+  segments      Int      @default(1)
+  userId        String?
+  purpose       String
+  recipientLast4 String
+  providerSid   String?  @unique
+  state         String   @default("queued")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([accountId, createdAt])
+}

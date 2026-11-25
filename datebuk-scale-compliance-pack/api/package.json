@@ -1,0 +1,8 @@
+{
+  "name": "datebuk-scale-compliance-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {"dev":"node src/server.js","test":"node --test tests/*.test.js"},
+  "dependencies": {"cors":"latest","dotenv":"latest","express":"latest","helmet":"latest","jsonwebtoken":"latest","zod":"latest"},
+  "devDependencies": {}
+}

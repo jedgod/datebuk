@@ -1,0 +1,40 @@
+services:
+  api:
+    image: datebuk/calling-api:latest
+    restart: unless-stopped
+    env_file: [../.env.production]
+    secrets: [apple_apns_key, firebase_service_account]
+    ports: ["127.0.0.1:5052:5052"]
+    depends_on: [postgres, redis]
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: datebuk
+      POSTGRES_USER: datebuk
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes: [redis_data:/data]
+  coturn:
+    image: coturn/coturn:4.6.3
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    command: ["-c","/etc/coturn/turnserver.conf"]
+secrets:
+  apple_apns_key:
+    file: ../secrets/apple/AuthKey.p8
+  firebase_service_account:
+    file: ../secrets/firebase/firebase-service-account.json
+  postgres_password:
+    file: ../secrets/postgres/password.txt
+volumes:
+  postgres_data:
+  redis_data:

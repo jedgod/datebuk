@@ -1,0 +1,39 @@
+{
+  "name": "datepage-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.5.0",
+  "scripts": {
+    "dev": "pnpm run dev:minimal",
+    "dev:minimal": "turbo run dev --filter=web --filter=api",
+    "dev:realtime": "turbo run dev --filter=web --filter=api --filter=signaling",
+    "dev:all-workspaces": "turbo run dev",
+    "dev:web": "turbo run dev --filter=web",
+    "dev:portal": "cd apps/web && pnpm run dev:portal",
+    "dev:admin": "pnpm run dev:portal",
+    "dev:staff": "pnpm run dev:portal",
+    "dev:web-only": "pnpm run dev:minimal",
+    "dev:app": "concurrently \"cd apps/web && pnpm run dev\" \"cd apps/api && pnpm run dev\"",
+    "dev:app:admin": "concurrently \"cd apps/web && pnpm run dev\" \"cd apps/web && pnpm run dev:portal\" \"cd apps/api && pnpm run dev\"",
+    "dev:app:all": "concurrently \"cd apps/web && pnpm run dev\" \"cd apps/web && pnpm run dev:portal\" \"cd apps/api && pnpm run dev\"",
+    "dev:api": "turbo run dev --filter=api",
+    "dev:signaling": "turbo run dev --filter=signaling",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "turbo run db:generate --filter=api",
+    "db:migrate": "turbo run db:migrate --filter=api",
+    "db:seed": "turbo run db:seed --filter=api",
+    "studio": "turbo run studio --filter=api",
+    "credentials:preflight": "node scripts/credentials/preflight.mjs",
+    "production:config": "docker compose --env-file .env.production -f docker-compose.production.yml config"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.4",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.3",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0"
+  }
+}

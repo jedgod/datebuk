@@ -1,0 +1,84 @@
+// Prisma Schema Update for Enhanced Quarantine
+// File: prisma/schema.prisma - Add or update the QuarantinedVideo model
+
+model QuarantinedVideo {
+  id                 String   @id @default(cuid())
+  videoId            String   @unique
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Content Analysis
+  nudityScore        Int      @default(0)  // 0-100
+  audioScore         Int      @default(0)  // 0-100
+  severity           Int      @default(0)  // 0-100, derived from nudity + audio + other factors
+  priority           String   @default("P5")  // P0 (critical) to P5 (low)
+  confidence         Float    @default(0.5)
+
+  // Media Assets
+  keyframeUrls       String[] @default([])  // Array of S3 URLs for keyframes
+  waveformUrl        String?  // S3 URL for static waveform image
+  waveformPeaks      Int[]?   // Array of normalized peak values (0-255) for client-side rendering
+
+  // Metadata
+  reason             String
+  chatContext        String?  // Last message snippet from chat
+  durationSeconds    Int      @default(0)
+
+  // Status & Moderation
+  status             String   @default("quarantined")  // quarantined, reviewed, released, deleted, escalated
+  
+  // Moderation Actions
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  moderatorNotes     String?
+
+  deletedBy          String?
+  deletedAt          DateTime?
+  deletionReason     String?
+
+  escalatedBy        String?
+  escalatedAt        DateTime?
+  escalationReason   String?
+
+  // Timestamps
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Indexes for performance
+  @@index([userId])
+  @@index([status])
+  @@index([severity])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+// User model (ensure it has the relation)
+model User {
+  id                String   @id @default(cuid())
+  name              String
+  email             String   @unique
+  avatarUrl         String?
+  trustLevel        String   @default("new")  // new, low, medium, high
+
+  // Relations
+  quarantinedVideos QuarantinedVideo[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// Setup instructions:
+// 1. Add this model to your prisma/schema.prisma file
+// 2. Run: npx prisma migrate dev --name add_enhanced_quarantine
+// 3. Or create the migration manually in prisma/migrations/
+
+// Environment variables needed in .env:
+// AWS_ACCESS_KEY_ID=your_key
+// AWS_SECRET_ACCESS_KEY=your_secret
+// AWS_REGION=us-east-1
+// AWS_S3_BUCKET=datepage-quarantine
+
+// System dependencies for processing:
+// - ffmpeg: brew install ffmpeg (macOS) or apt-get install ffmpeg (Linux)
+// - ffprobe: comes with ffmpeg
+// - audiowaveform: npm install -g audiowaveform (optional, for peaks data)

@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: datebuk
+      POSTGRES_USER: datebuk
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes: [redis_data:/data]
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    env_file: [.env.production]
+    environment:
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      REFRESH_TOKEN_PEPPER_FILE: /run/secrets/refresh_token_pepper
+      TURN_SHARED_SECRET_FILE: /run/secrets/turn_shared_secret
+      TOTP_ENCRYPTION_KEY_FILE: /run/secrets/totp_encryption_key
+      APNS_KEY_PATH: /run/secrets/apple_apns_key
+      FIREBASE_SERVICE_ACCOUNT_PATH: /run/secrets/firebase_service_account
+    secrets: [jwt_secret, refresh_token_pepper, turn_shared_secret, totp_encryption_key, apple_apns_key, firebase_service_account]
+    ports: ["127.0.0.1:4000:4000"]
+    depends_on: [postgres, redis]
+
+  signaling:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.signaling
+    restart: unless-stopped
+    env_file: [.env.production]
+    environment:
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+    secrets: [jwt_secret]
+    ports: ["127.0.0.1:4001:4001"]
+    depends_on: [api, redis]
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    restart: unless-stopped
+    env_file: [.env.production]
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [api, signaling]
+
+  coturn:
+    image: coturn/coturn:4.6.3
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./infra/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+
+secrets:
+  jwt_secret: { file: ./secrets/runtime/jwt-secret.txt }
+  refresh_token_pepper: { file: ./secrets/runtime/refresh-token-pepper.txt }
+  totp_encryption_key: { file: ./secrets/runtime/totp-encryption-key.txt }
+  turn_shared_secret: { file: ./secrets/turn/shared-secret.txt }
+  apple_apns_key: { file: ./secrets/apple/AuthKey.p8 }
+  firebase_service_account: { file: ./secrets/firebase/firebase-service-account.json }
+  postgres_password: { file: ./secrets/postgres/password.txt }
+
+volumes:
+  postgres_data:
+  redis_data:

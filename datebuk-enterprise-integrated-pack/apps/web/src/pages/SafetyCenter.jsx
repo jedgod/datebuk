@@ -1,0 +1,1 @@
+export default function SafetyCenter(){return <main className="page"><h1>Safety Center</h1><section className="grid"><button>Report User</button><button>Block User</button><button>Safety Tips</button><button>Emergency Contact</button></section></main>}

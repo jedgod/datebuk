@@ -1,0 +1,1 @@
+export default function SmartMatch(){return <main className="page"><h1>Smart Match AI</h1><p>Explainable matching based on interests, relationship goals, lifestyle, location, safety, and communication style.</p><div className="card"><h2>Top Match: 94%</h2><ul><li>Shared values</li><li>Similar dating goals</li><li>Strong lifestyle compatibility</li></ul></div></main>}

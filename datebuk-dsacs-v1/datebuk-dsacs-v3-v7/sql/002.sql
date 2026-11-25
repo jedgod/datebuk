@@ -1,0 +1,12 @@
+BEGIN;
+ALTER TABLE dsacs.accounts ADD COLUMN suspended boolean NOT NULL DEFAULT false;
+ALTER TABLE dsacs.accounts ADD COLUMN revision bigint NOT NULL DEFAULT 0;
+ALTER TABLE dsacs.operations ADD COLUMN payload_hash text;
+CREATE TABLE dsacs.grants(provider text NOT NULL, external_id text NOT NULL, user_id text NOT NULL REFERENCES dsacs.accounts, plan text NOT NULL CHECK(plan IN ('premium','elite')), status text NOT NULL, period_end timestamptz NOT NULL, PRIMARY KEY(provider,external_id));
+CREATE TABLE dsacs.staff_roles(user_id text PRIMARY KEY, role text NOT NULL CHECK(role IN ('admin','billing','support')));
+CREATE TABLE dsacs.cases(id uuid PRIMARY KEY, user_id text NOT NULL, assigned_to text, severity text NOT NULL CHECK(severity IN ('critical','high','medium','low')), due_at timestamptz NOT NULL, acknowledged_at timestamptz, escalated_at timestamptz, closed_at timestamptz);
+CREATE TABLE dsacs.outbox(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, topic text NOT NULL, payload jsonb NOT NULL, delivered_at timestamptz);
+CREATE TABLE dsacs.disabled_features(feature text PRIMARY KEY);
+CREATE TABLE dsacs.leases(id uuid PRIMARY KEY, user_id text NOT NULL, peer_id text NOT NULL, feature text NOT NULL, expires_at timestamptz NOT NULL, revoked_at timestamptz);
+CREATE TABLE dsacs.risk_events(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, user_id text, kind text NOT NULL, created_at timestamptz DEFAULT now());
+COMMIT;

@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: datebuk-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: datebuk-api
+  template:
+    metadata:
+      labels:
+        app: datebuk-api
+    spec:
+      containers:
+        - name: api
+          image: datebuk/api:latest
+          ports:
+            - containerPort: 5050
+          envFrom:
+            - secretRef:
+                name: datebuk-api-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: datebuk-api-service
+spec:
+  selector:
+    app: datebuk-api
+  ports:
+    - port: 80
+      targetPort: 5050

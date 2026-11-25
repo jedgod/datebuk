@@ -1,0 +1,2 @@
+@WebSocketGateway()
+export class WsGateway {}

@@ -1,0 +1,16 @@
+{
+  "name": "datebuk-geo-matching-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": { "dev": "node src/server.js" },
+  "dependencies": {
+    "@prisma/client": "latest",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "geoip-lite": "latest",
+    "helmet": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": { "prisma": "latest" }
+}

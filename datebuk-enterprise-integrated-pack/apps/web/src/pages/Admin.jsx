@@ -1,0 +1,1 @@
+export default function Admin(){return <main className="page"><h1>Admin Moderation</h1><table><tbody><tr><th>Case</th><th>Reason</th><th>Status</th></tr><tr><td>R-1001</td><td>Harassment</td><td>Open</td></tr></tbody></table></main>}

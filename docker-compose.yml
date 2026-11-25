@@ -1,0 +1,73 @@
+# DEV ONLY — local development services with default/weak credentials and ports bound
+# to 127.0.0.1 only. Do NOT reuse this file as a staging/production template; see
+# docker-compose.production.yml for the hardened production configuration (Docker
+# secrets, no exposed default credentials, internal-only port bindings).
+version: "3.9"
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  clamav:
+    image: clamav/clamav:latest
+    ports:
+      - "127.0.0.1:3310:3310"
+    environment:
+      - CLAMD_CONF_MaxFileSize=25M
+      - CLAMD_CONF_MaxScanSize=25M
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-datepage}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    ports:
+      - "127.0.0.1:5050:80"
+    depends_on:
+      - db
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    env_file: .env
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      - db
+      - redis
+
+  signaling:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.signaling
+    env_file: .env
+    ports:
+      - "127.0.0.1:4001:4001"
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    env_file: .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+      - signaling
+      - redis
+
+volumes:
+  dbdata:

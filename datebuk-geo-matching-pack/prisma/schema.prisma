@@ -1,0 +1,42 @@
+model UserLocation {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  ipHash      String?
+  country     String?
+  countryCode String?
+  continent   String?
+  city        String?
+  latitude    Float?
+  longitude   Float?
+  source      LocationSource @default(IP)
+  precision   LocationPrecision @default(APPROXIMATE)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model LocationPreference {
+  id                  String @id @default(cuid())
+  userId              String @unique
+  matchScope          MatchScope @default(SAME_CONTINENT)
+  showCountryOnly     Boolean @default(true)
+  allowGlobalMatches  Boolean @default(false)
+  travelModeEnabled   Boolean @default(false)
+  travelCountry       String?
+  travelContinent     String?
+  updatedAt           DateTime @updatedAt
+}
+
+model RegionRule {
+  id          String @id @default(cuid())
+  continent   String
+  countryCode String?
+  isEnabled   Boolean @default(true)
+  accessMode  RegionAccessMode @default(PRIORITIZE)
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+enum LocationSource { IP GPS MANUAL TRAVEL }
+enum LocationPrecision { APPROXIMATE EXACT }
+enum MatchScope { NEARBY SAME_COUNTRY SAME_CONTINENT GLOBAL }
+enum RegionAccessMode { PRIORITIZE RESTRICT DISABLED }

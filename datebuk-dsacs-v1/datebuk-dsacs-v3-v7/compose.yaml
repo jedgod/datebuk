@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: dsacs
+    volumes:
+      - data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+  api:
+    build: .
+    env_file: .env
+    ports: ["127.0.0.1:4090:4090"]
+    depends_on: [db,redis]
+  worker:
+    build: .
+    env_file: .env
+    command: ["node","src/worker.js"]
+    depends_on: [db,redis]
+volumes:
+  data:
+  redisdata:

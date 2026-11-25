@@ -1,0 +1,1 @@
+export default function Chat(){return <main className="page"><h1>Realtime Chat</h1><div className="chat"><aside>Ama<br/>Sarah<br/>David</aside><section><p className="bubble">Hi, nice to meet you!</p><input placeholder="Write a message..." /></section></div></main>}

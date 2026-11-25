@@ -1,0 +1,8 @@
+{
+  "name": "run-dashboard-driver",
+  "private": true,
+  "description": "Self-contained driver deps for the run-dashboard skill. Not part of the app's own dependency tree.",
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}

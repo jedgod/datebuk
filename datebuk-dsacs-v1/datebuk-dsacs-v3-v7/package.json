@@ -1,0 +1,1 @@
+{"name":"datebuk-dsacs","version":"7.0.0","type":"module","scripts":{"start":"node src/server.js","test":"node --test","worker":"node src/worker.js"},"dependencies":{"express":"^5.1.0","pg":"^8.13.0","stripe":"^18.0.0","jose":"^6.0.0","redis":"^4.7.0"}}

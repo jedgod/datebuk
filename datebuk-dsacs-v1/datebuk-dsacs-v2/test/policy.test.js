@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {plans,prices,limit,effective,limits,safety} from '../src/policy.js';
+test('three canonical plans',()=>assert.deepEqual(plans,['free','premium','elite']));
+test('prices',()=>assert.deepEqual(prices,{free:0,premium:1499,elite:2999}));
+test('likes',()=>assert.deepEqual(plans.map(p=>limit(p,'match.likes')),[10,-1,-1]));
+test('voice',()=>assert.deepEqual(plans.map(p=>limit(p,'voice.start')),[0,-1,-1]));
+test('video and location',()=>{for(const f of ['video.start','video.schedule','location.share'])assert.deepEqual(plans.map(p=>limit(p,f)),[0,0,-1])});
+test('safety never paywalled',()=>{for(const p of plans)for(const f of safety)assert.equal(limit(p,f),-1)});
+test('unknown denied',()=>{assert.equal(limit('elite','constructor'),0);assert.equal(limit('plus','video.start'),0)});
+test('expired and invalid plans fallback',()=>{for(const plan of ['plus','elite'])assert.equal(effective({plan,status:'active',period_end:'2000-01-01'}),'free');assert.equal(effective({plan:'plus',status:'active',period_end:'2099-01-01'}),'free')});
+test('active paid',()=>assert.equal(effective({plan:'elite',status:'active',period_end:'2099-01-01'}),'elite'));
+test('all policies valid',()=>{for(const v of Object.values(limits)){assert.equal(v.length,3);assert.ok(v.every(n=>Number.isInteger(n)&&n>=-1))}});

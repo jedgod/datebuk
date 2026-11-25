@@ -1,0 +1,2 @@
+import Dashboard from './pages/Dashboard';import SmartMatch from './pages/SmartMatch';import Chat from './pages/Chat';import SafetyCenter from './pages/SafetyCenter';import Admin from './pages/Admin';import './style.css';
+export default function App(){return <div className="app"><aside className="side"><h2>DateBuk</h2><a>Dashboard</a><a>Smart Match AI</a><a>Chat</a><a>Safety</a><a>Admin</a></aside><div><Dashboard/><SmartMatch/><Chat/><SafetyCenter/><Admin/></div></div>}

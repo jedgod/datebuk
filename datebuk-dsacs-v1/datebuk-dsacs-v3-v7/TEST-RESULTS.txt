@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: prices
+ok 1 - prices
+  ---
+  duration_ms: 2.64044
+  type: 'test'
+  ...
+# Subtest: free likes
+ok 2 - free likes
+  ---
+  duration_ms: 0.234381
+  type: 'test'
+  ...
+# Subtest: video elite only
+ok 3 - video elite only
+  ---
+  duration_ms: 0.269764
+  type: 'test'
+  ...
+# Subtest: safety always available
+ok 4 - safety always available
+  ---
+  duration_ms: 0.276858
+  type: 'test'
+  ...
+# Subtest: consent
+ok 5 - consent
+  ---
+  duration_ms: 0.593416
+  type: 'test'
+  ...
+# Subtest: block
+ok 6 - block
+  ---
+  duration_ms: 0.365573
+  type: 'test'
+  ...
+# Subtest: unknown
+ok 7 - unknown
+  ---
+  duration_ms: 0.162033
+  type: 'test'
+  ...
+# Subtest: expiry
+ok 8 - expiry
+  ---
+  duration_ms: 0.289853
+  type: 'test'
+  ...
+# Subtest: payload binding
+ok 9 - payload binding
+  ---
+  duration_ms: 3.023862
+  type: 'test'
+  ...
+# Subtest: suspension
+ok 10 - suspension
+  ---
+  duration_ms: 0.75469
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 157.141931

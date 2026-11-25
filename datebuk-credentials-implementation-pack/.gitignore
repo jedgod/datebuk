@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.production.example
+secrets/**
+!secrets/.gitkeep
+!secrets/README.md
+*.p8
+*.p12
+*.mobileprovision
+*.keystore
+*.jks
+apps/mobile/android/app/google-services.json
+apps/mobile/android/gradle.properties
+infra/coturn/turnserver.conf

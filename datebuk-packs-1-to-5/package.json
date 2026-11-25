@@ -1,0 +1,13 @@
+{
+  "name": "datebuk-packs-1-to-5",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DateBuk web, mobile and API implementation packs 1 to 5",
+  "scripts": {
+    "start:api": "node example-server.js"
+  },
+  "dependencies": {
+    "express": "latest",
+    "cors": "latest"
+  }
+}

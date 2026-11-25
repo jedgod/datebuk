@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Staff {
+  id String @id @default(uuid())
+  email String @unique
+  role String
+  skills Json?
+}
+
+model Ticket {
+  id String @id @default(uuid())
+  userId String
+  summary String?
+  assignedStaffId String?
+}
+
+model TicketEmbedding {
+  id String @id @default(uuid())
+  ticketId String
+  embedding Bytes
+}
+
+model AuditEvent {
+  id String @id @default(uuid())
+  type String
+  payload Json
+  createdAt DateTime @default(now())
+}
+
+model ChatMessage {
+  id String @id @default(uuid())
+  sessionId String
+  sender String // 'user' or 'support'
+  senderEmail String?
+  message String
+  createdAt DateTime @default(now())
+  
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+model ChatSession {
+  id String @id @default(uuid())
+  userEmail String?
+  userName String?
+  status String @default("active") // active, closed
+  staffId String?
+  createdAt DateTime @default(now())
+  closedAt DateTime?
+  
+  @@index([status])
+  @@index([staffId])
+}

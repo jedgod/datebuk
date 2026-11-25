@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: three canonical plans
+ok 1 - three canonical plans
+  ---
+  duration_ms: 3.537487
+  type: 'test'
+  ...
+# Subtest: prices
+ok 2 - prices
+  ---
+  duration_ms: 0.218762
+  type: 'test'
+  ...
+# Subtest: likes
+ok 3 - likes
+  ---
+  duration_ms: 0.141839
+  type: 'test'
+  ...
+# Subtest: voice
+ok 4 - voice
+  ---
+  duration_ms: 0.158923
+  type: 'test'
+  ...
+# Subtest: video and location
+ok 5 - video and location
+  ---
+  duration_ms: 0.231193
+  type: 'test'
+  ...
+# Subtest: safety never paywalled
+ok 6 - safety never paywalled
+  ---
+  duration_ms: 0.391824
+  type: 'test'
+  ...
+# Subtest: unknown denied
+ok 7 - unknown denied
+  ---
+  duration_ms: 0.339657
+  type: 'test'
+  ...
+# Subtest: expired and invalid plans fallback
+ok 8 - expired and invalid plans fallback
+  ---
+  duration_ms: 0.670398
+  type: 'test'
+  ...
+# Subtest: active paid
+ok 9 - active paid
+  ---
+  duration_ms: 0.303559
+  type: 'test'
+  ...
+# Subtest: all policies valid
+ok 10 - all policies valid
+  ---
+  duration_ms: 0.543588
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 116.860264

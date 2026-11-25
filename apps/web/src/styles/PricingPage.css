@@ -1,0 +1,19 @@
+/* src/styles/PricingPage.css */
+.container {
+  flex: 1;
+  background-color: #f8f9fa;
+}
+
+.header {
+  padding: 24px;
+  align-items: center;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: bold;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+/* ... rest can be inline in TSX for simplicity */

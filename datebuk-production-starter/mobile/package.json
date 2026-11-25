@@ -1,0 +1,1 @@
+{"scripts":{"start":"expo start","android":"expo start --android","web":"expo start --web"},"dependencies":{"expo":"latest","react":"latest","react-native":"latest","@expo/vector-icons":"latest"},"devDependencies":{}}

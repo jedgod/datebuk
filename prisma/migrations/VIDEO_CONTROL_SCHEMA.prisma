@@ -1,0 +1,149 @@
+// Prisma Schema Migration for Video Date Control System
+// File: prisma/migrations/ADD_VIDEO_CONTROL_SCHEMA.prisma
+
+// ──────────────────────────────────────────────────────────────
+// Active Video Session Model
+// ──────────────────────────────────────────────────────────────
+// Tracks live video sessions for real-time moderation
+// Status: active (ongoing), flagged (AI flagged), reviewed (moderated),
+//   interrupted (moderator stopped), escalated (senior review)
+
+model ActiveVideoSession {
+  id                String    @id @default(cuid())
+  matchId           String    @unique
+  
+  // Session metadata
+  startedAt         DateTime  @default(now())
+  endedAt           DateTime?
+  durationSeconds   Int?
+  
+  // Participants (User relationship via userIds JSON array)
+  userIds           String[]  @default([])
+  
+  // AI Analysis Scores
+  aiScores          Json      @default({ "nudity": 0, "audio": 0, "overall": 0 })
+  // Example: { nudity: 85, audio: 65, overall: 75 }
+  
+  // Content flags
+  reportCount       Int       @default(0)
+  lastMessageSnippet String?
+  priority          String    @default("medium") // "high", "medium", "low"
+  
+  // Status tracking
+  status            String    @default("active") // "active", "flagged", "reviewed", "interrupted", "escalated"
+  
+  // Moderation decisions
+  reviewedAt        DateTime?
+  interruptedAt     DateTime?
+  escalatedAt       DateTime?
+  escalationReason  String?
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Indexes for common queries
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+  @@index([reviewedAt])
+  @@index([aiScores])
+}
+
+// ──────────────────────────────────────────────────────────────
+// Filter Preset Model
+// ──────────────────────────────────────────────────────────────
+// User-specific saved filter configurations for the video queue
+
+model FilterPreset {
+  id                String    @id @default(cuid())
+  userId            String    // Reference to User model (would need relation)
+  name              String    // E.g., "High Risk Faith Sessions", "Recent Audits"
+  
+  // Saved filter configuration
+  filters           Json      // { sortBy, direction, intent, onlyHighRisk }
+  // Example: {
+  //   "sortBy": "priority",
+  //   "direction": "desc",
+  //   "intent": "Faith",
+  //   "onlyHighRisk": true
+  // }
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Unique constraint per user
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────────
+// Migration Commands
+// ──────────────────────────────────────────────────────────────
+// 1. Save this content to: prisma/migrations/[timestamp]_add_video_control/migration.sql
+// 2. Or use Prisma migrate:
+//    npx prisma migrate dev --name add_video_control_schema
+//
+// If using SQL directly:
+//
+// CREATE TABLE "ActiveVideoSession" (
+//   "id" TEXT NOT NULL PRIMARY KEY,
+//   "matchId" TEXT NOT NULL UNIQUE,
+//   "startedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+//   "endedAt" DATETIME,
+//   "durationSeconds" INTEGER,
+//   "userIds" TEXT NOT NULL DEFAULT '[]',
+//   "aiScores" TEXT NOT NULL DEFAULT '{"nudity":0,"audio":0,"overall":0}',
+//   "reportCount" INTEGER NOT NULL DEFAULT 0,
+//   "lastMessageSnippet" TEXT,
+//   "priority" TEXT NOT NULL DEFAULT 'medium',
+//   "status" TEXT NOT NULL DEFAULT 'active',
+//   "reviewedAt" DATETIME,
+//   "interruptedAt" DATETIME,
+//   "escalatedAt" DATETIME,
+//   "escalationReason" TEXT,
+//   "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+//   "updatedAt" DATETIME NOT NULL
+// );
+//
+// CREATE INDEX "ActiveVideoSession_status_idx" ON "ActiveVideoSession"("status");
+// CREATE INDEX "ActiveVideoSession_priority_idx" ON "ActiveVideoSession"("priority");
+// CREATE INDEX "ActiveVideoSession_createdAt_idx" ON "ActiveVideoSession"("createdAt");
+// CREATE INDEX "ActiveVideoSession_reviewedAt_idx" ON "ActiveVideoSession"("reviewedAt");
+//
+// CREATE TABLE "FilterPreset" (
+//   "id" TEXT NOT NULL PRIMARY KEY,
+//   "userId" TEXT NOT NULL,
+//   "name" TEXT NOT NULL,
+//   "filters" TEXT NOT NULL,
+//   "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+//   "updatedAt" DATETIME NOT NULL
+// );
+//
+// CREATE UNIQUE INDEX "FilterPreset_userId_name_key" ON "FilterPreset"("userId", "name");
+// CREATE INDEX "FilterPreset_userId_idx" ON "FilterPreset"("userId");
+
+// ──────────────────────────────────────────────────────────────
+// Setup Checklist
+// ──────────────────────────────────────────────────────────────
+// ✅ 1. Add schema definitions above to your prisma/schema.prisma
+// ✅ 2. Run: npx prisma migrate dev --name add_video_control_schema
+// ✅ 3. Install dependencies:
+//      npm install recharts
+// ✅ 4. Create API routes in apps/api/src/routes/admin/:
+//      - active-video-queue.ts
+//      - interrupt-video.ts
+//      - bulk-video-action.ts
+//      - moderator-stats.ts
+//      - agreement-trend.ts
+//      - filter-presets.ts
+// ✅ 5. Register routes in your Express app:
+//      app.use('/api/admin/active-video-queue', require('./routes/admin/active-video-queue'));
+//      app.use('/api/admin/interrupt-video', require('./routes/admin/interrupt-video'));
+//      // ... etc
+// ✅ 6. Update page component with new UI and features
+// ✅ 7. Test all endpoints with sample data
+// ✅ 8. Configure WebSocket handlers for real-time updates
+// ✅ 9. Add moderator fatigue alerts monitoring
+// ✅ 10. Setup CSV export functionality

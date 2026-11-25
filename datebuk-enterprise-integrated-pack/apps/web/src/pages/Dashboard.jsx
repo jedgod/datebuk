@@ -1,0 +1,2 @@
+export default function Dashboard(){return <main className="page"><h1>DateBuk Command Center</h1><section className="grid"><Card title="Smart Matches" value="94%"/><Card title="Unread Chats" value="12"/><Card title="Trust Score" value="85%"/><Card title="Premium Revenue" value="$12.8k"/></section></main>}
+function Card({title,value}){return <article className="card"><p>{title}</p><h2>{value}</h2></article>}

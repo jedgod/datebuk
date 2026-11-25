@@ -1,0 +1,92 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+enum UserRole { USER ADMIN MODERATOR }
+enum TicketStatus { OPEN IN_PROGRESS RESOLVED CLOSED }
+enum VerificationStatus { PENDING APPROVED REJECTED }
+enum MatchStatus { LIKED MATCHED PASSED BLOCKED }
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  profile   Profile?
+  sentMessages Message[] @relation("SentMessages")
+  reportsMade Report[] @relation("ReportsMade")
+}
+
+model Profile {
+  id          String @id @default(cuid())
+  userId      String @unique
+  user        User @relation(fields: [userId], references: [id])
+  displayName String
+  age         Int
+  city        String?
+  country     String?
+  bio         String?
+  interests   String[]
+  goal        String?
+  verified    Boolean @default(false)
+}
+
+model Match {
+  id        String @id @default(cuid())
+  userId    String
+  targetId  String
+  status    MatchStatus @default(LIKED)
+  score     Int @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Message {
+  id         String @id @default(cuid())
+  senderId   String
+  sender     User @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId String
+  body       String
+  read       Boolean @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model Report {
+  id          String @id @default(cuid())
+  reporterId  String
+  reporter    User @relation("ReportsMade", fields: [reporterId], references: [id])
+  reportedId  String
+  reason      String
+  details     String?
+  status      String @default("OPEN")
+  createdAt   DateTime @default(now())
+}
+
+model Ticket {
+  id        String @id @default(cuid())
+  name      String
+  email     String
+  issueType String
+  message   String
+  attachmentUrl String?
+  status    TicketStatus @default(OPEN)
+  createdAt DateTime @default(now())
+}
+
+model Subscription {
+  id        String @id @default(cuid())
+  userId    String
+  plan      String
+  provider  String
+  status    String
+  renewsAt  DateTime?
+  createdAt DateTime @default(now())
+}
+
+model Verification {
+  id        String @id @default(cuid())
+  userId    String
+  type      String
+  fileUrl   String?
+  status    VerificationStatus @default(PENDING)
+  createdAt DateTime @default(now())
+}

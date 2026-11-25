@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "DateBuk",
+    "slug": "datebuk",
+    "scheme": "datebuk",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "sounds": []
+        }
+      ]
+    ],
+    "android": {
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "FOREGROUND_SERVICE_CAMERA"
+      ]
+    },
+    "ios": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "DateBuk uses your camera for video calls.",
+        "NSMicrophoneUsageDescription": "DateBuk uses your microphone for voice and video calls."
+      }
+    }
+  }
+}
