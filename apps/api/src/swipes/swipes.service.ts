@@ -1,3 +1,4 @@
+import { browseGenderWhere } from "./browse-filter";
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../database/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -14,6 +15,9 @@ export class SwipesService {
   ) {}
 
   async recommendations(userId: string, limit = 20) {
+    // Women see men and men see women by default (or whoever the member said they are looking for at signup).
+    const viewer = await this.prisma.user.findUnique({ where: { id: userId }, select: { gender: true, genderPreference: true } });
+
     // Industrial starter: simple queue excluding self + already swiped + already matched.
     const swiped = await this.prisma.like.findMany({ where: { fromId: userId }, select: { toId: true } });
     const swipedIds = new Set(swiped.map((x) => x.toId));
@@ -49,8 +53,11 @@ export class SwipesService {
           { id: { notIn: Array.from(swipedIds) } },
           { id: { notIn: Array.from(matchedIds) } },
           { id: { notIn: Array.from(blockedIds) } },
+          ...browseGenderWhere(viewer ?? {}),
         ],
       },
+      // Newest members first, so people who just registered are seen straight away.
+      orderBy: { createdAt: "desc" },
       take: limit,
       select: { id: true, profile: true },
     });
