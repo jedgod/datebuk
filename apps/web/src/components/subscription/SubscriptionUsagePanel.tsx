@@ -72,27 +72,27 @@ export function SubscriptionUsagePanel() {
   const price = usage.priceCents === 0 ? "Free" : `$${(usage.priceCents / 100).toFixed(2)}/month`;
 
   return (
-    <section className="mb-8 rounded-2xl border border-white/15 bg-white/5 p-5" aria-label="Plan usage">
+    <section className="mb-5 rounded-xl border border-white/15 bg-white/5 p-3.5" aria-label="Plan usage">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">
+        <h2 className="text-base font-semibold">
           Your plan: <span className="text-pink-400 capitalize">{usage.plan}</span> <span className="text-sm font-normal text-white/60">· {price}</span>
         </h2>
         <p className="text-xs text-white/50">Daily limits reset {new Date(usage.resetsAt).toLocaleString()}</p>
       </div>
 
       {quotas.length > 0 && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-2.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {quotas.map((f) => {
             const pct = f.limit ? Math.min(100, Math.round(((f.used ?? 0) / f.limit) * 100)) : 0;
             return (
-              <div key={f.feature} className="rounded-xl bg-black/20 p-3">
+              <div key={f.feature} className="rounded-lg bg-black/20 p-2">
                 <div className="flex justify-between text-sm">
                   <span className="capitalize">{pretty(f.feature)}</span>
                   <span className="text-white/70">
                     {f.used}/{f.limit} today
                   </span>
                 </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
                   <div className={`h-full ${pct >= 100 ? "bg-red-400" : pct >= 80 ? "bg-amber-400" : "bg-emerald-400"}`} style={{ width: `${pct}%` }} />
                 </div>
                 {f.remaining === 0 && <p className="mt-1 text-xs text-red-300">Limit reached - resets tomorrow.</p>}
@@ -104,7 +104,7 @@ export function SubscriptionUsagePanel() {
 
       <details className="mt-4">
         <summary className="cursor-pointer text-sm text-white/70">What&apos;s included in your plan</summary>
-        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {groups.map(([key, items]) => (
             <div key={key}>
               <h3 className="mb-1 text-sm font-semibold text-white/90">{GROUP_LABEL[key] ?? key}</h3>

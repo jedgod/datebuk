@@ -89,9 +89,9 @@ const Badge = ({ value }: { value: string }) => (
   <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[value] ?? STATUS_STYLE.pending}`}>{value}</span>
 );
 
-const card = "rounded-xl border border-white/10 bg-white/5 p-4";
-const input = "w-full rounded-lg border border-white/15 bg-slate-950/60 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-amber-400 focus:outline-none";
-const btn = "rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:opacity-40";
+const card = "rounded-lg border border-white/10 bg-white/5 p-3";
+const input = "w-full rounded-lg border border-white/15 bg-slate-950/60 px-2.5 py-1.5 text-[13px] text-white placeholder:text-slate-500 focus:border-amber-400 focus:outline-none";
+const btn = "rounded-md px-2.5 py-1 text-xs font-medium transition disabled:opacity-40";
 const btnPrimary = `${btn} bg-amber-500 text-slate-950 hover:bg-amber-400`;
 const btnGhost = `${btn} border border-white/15 text-slate-200 hover:bg-white/10`;
 const btnDanger = `${btn} border border-red-500/50 text-red-300 hover:bg-red-500/10`;
@@ -296,17 +296,17 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
 
   return (
     // Own dark surface: the console is styled for dark and is mounted inside layouts with light content areas.
-    <div className="space-y-5 rounded-2xl bg-slate-900 p-4 text-slate-100 md:p-6">
+    <div className="space-y-3 rounded-xl bg-slate-900 p-3 text-slate-100 md:p-4">
       <div>
-        <h1 className="text-2xl font-bold">{admin ? "Communications Center" : "Communications Operations"}</h1>
-        <p className="text-sm text-slate-400">
+        <h1 className="text-lg font-bold">{admin ? "Communications Center" : "Communications Operations"}</h1>
+        <p className="text-xs text-slate-400">
           {admin
             ? "Twilio provider accounts, senders, spending controls, delivery and audit. Changes require MFA confirmation."
             : "Read-only view of SMS delivery, history and audit. Provider administration is superadmin-only."}
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-white/10 pb-2">
+      <div className="flex flex-wrap gap-1 border-b border-white/10 pb-1.5">
         {tabs.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={`${btn} ${tab === t.id ? "bg-amber-500 text-slate-950" : "text-slate-300 hover:bg-white/10"}`}>
             {t.label}
@@ -319,7 +319,7 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
 
       {/* ---------- Overview ---------- */}
       {tab === "overview" && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-slate-400">Period</span>
             {[1, 7, 30].map((d) => (
@@ -332,15 +332,15 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
             <p className="text-slate-400">Loading…</p>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">
                 <Stat label="Messages" value={analytics.total} />
                 <Stat label="Segments billed" value={analytics.segments} />
                 <Stat label="Delivery rate" value={analytics.deliveryRate == null ? "-" : `${analytics.deliveryRate}%`} />
                 <Stat label="Needs reconciliation" value={analytics.needsReconciliation} warn={analytics.needsReconciliation > 0} hint="Outcome unknown. Never auto-retried; check with Twilio before resending." />
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-2 md:grid-cols-2">
                 <div className={card}>
-                  <h3 className="mb-2 font-semibold">By delivery state</h3>
+                  <h3 className="mb-1.5 text-sm font-semibold">By delivery state</h3>
                   {Object.keys(analytics.byState).length === 0 ? <p className="text-sm text-slate-400">No messages in this period.</p> : (
                     <ul className="space-y-1 text-sm">
                       {Object.entries(analytics.byState).map(([s, n]) => (
@@ -350,9 +350,9 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
                   )}
                 </div>
                 <div className={card}>
-                  <h3 className="mb-2 font-semibold">Per day</h3>
+                  <h3 className="mb-1.5 text-sm font-semibold">Per day</h3>
                   {analytics.perDay.length === 0 ? <p className="text-sm text-slate-400">No data.</p> : (
-                    <table className="w-full text-sm"><thead className="text-left text-slate-400"><tr><th>Day</th><th>Messages</th><th>Segments</th></tr></thead>
+                    <table className="w-full text-xs"><thead className="text-left text-slate-400"><tr><th>Day</th><th>Messages</th><th>Segments</th></tr></thead>
                       <tbody>{analytics.perDay.map((d) => <tr key={d.day}><td>{d.day}</td><td>{d.messages}</td><td>{d.segments}</td></tr>)}</tbody></table>
                   )}
                 </div>
@@ -364,7 +364,7 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
 
       {/* ---------- Accounts ---------- */}
       {tab === "accounts" && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {admin && (
             <div className="flex flex-wrap gap-2">
               <button className={btnPrimary} onClick={() => setShowRegister(true)}>Register Twilio account</button>
@@ -401,7 +401,7 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
                 </div>
               </div>
 
-              <div className="mt-3 space-y-1 text-sm">
+              <div className="mt-2 space-y-1 text-xs">
                 <p className="text-slate-400">Senders</p>
                 {a.senders.length === 0 ? <p className="text-slate-500">None. Add a sender before activating.</p> : a.senders.map((s) => (
                   <div key={s.id} className="flex items-center justify-between rounded-lg bg-black/20 px-3 py-1.5">
@@ -414,7 +414,7 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
               </div>
 
               {admin && a.status !== "revoked" && (
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-2 flex flex-wrap gap-1.5">
                   <button className={btnGhost} onClick={() => act("Validated", () => rawCall("POST", `/admin/sms/accounts/${a.id}/validate`), loadAccounts)}>Validate</button>
                   <button className={btnGhost} onClick={() => setSenderFor(a)}>Add sender</button>
                   {a.status !== "active" && <button className={btnPrimary} onClick={() => act("Activated", () => manage("POST", `/admin/sms/accounts/${a.id}/activate`), loadAccounts)}>Activate</button>}
@@ -440,12 +440,12 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
             <button className={btnGhost} onClick={() => loadMessages(false)}>Refresh</button>
           </div>
           <div className={card + " overflow-x-auto p-0"}>
-            <table className="w-full text-sm">
-              <thead className="text-left text-slate-400"><tr><th className="p-3">Time</th><th>Purpose</th><th>To</th><th>State</th><th>Segments</th>{admin && <th>Resolve</th>}</tr></thead>
+            <table className="w-full text-xs">
+              <thead className="text-left text-slate-400"><tr><th className="p-2">Time</th><th>Purpose</th><th>To</th><th>State</th><th>Segments</th>{admin && <th>Resolve</th>}</tr></thead>
               <tbody>
                 {messages.length === 0 ? <tr><td colSpan={admin ? 6 : 5} className="p-4 text-slate-400">No messages.</td></tr> : messages.map((m) => (
                   <tr key={m.id} className="border-t border-white/5">
-                    <td className="p-3 whitespace-nowrap">{new Date(m.createdAt).toLocaleString()}</td><td>{m.purpose}</td><td className="font-mono">•••{m.recipientLast4}</td><td><Badge value={m.state} /></td><td>{m.segments}</td>
+                    <td className="p-2 whitespace-nowrap">{new Date(m.createdAt).toLocaleString()}</td><td>{m.purpose}</td><td className="font-mono">•••{m.recipientLast4}</td><td><Badge value={m.state} /></td><td>{m.segments}</td>
                     {admin && (
                       <td className="whitespace-nowrap pr-3">
                         {m.state === "uncertain" ? (
@@ -469,12 +469,12 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
       {/* ---------- Audit ---------- */}
       {tab === "audit" && (
         <div className={card + " overflow-x-auto p-0"}>
-          <table className="w-full text-sm">
-            <thead className="text-left text-slate-400"><tr><th className="p-3">Time</th><th>Action</th><th>Actor</th><th>Details</th></tr></thead>
+          <table className="w-full text-xs">
+            <thead className="text-left text-slate-400"><tr><th className="p-2">Time</th><th>Action</th><th>Actor</th><th>Details</th></tr></thead>
             <tbody>
               {audit.length === 0 ? <tr><td colSpan={4} className="p-4 text-slate-400">No audit records.</td></tr> : audit.map((a) => (
                 <tr key={a.id} className="border-t border-white/5 align-top">
-                  <td className="p-3 whitespace-nowrap">{new Date(a.createdAt).toLocaleString()}</td>
+                  <td className="p-2 whitespace-nowrap">{new Date(a.createdAt).toLocaleString()}</td>
                   <td className="font-mono text-xs">{a.action}</td>
                   <td className="font-mono text-xs">{a.actorUserId ? a.actorUserId.slice(0, 8) : "system"}</td>
                   <td className="max-w-[420px] truncate font-mono text-xs text-slate-400">{a.metadata ? JSON.stringify(a.metadata) : ""}</td>
@@ -508,7 +508,7 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
 
       {/* ---------- Health & alerts ---------- */}
       {tab === "health" && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {!health ? <p className="text-slate-400">Loading…</p> : (
             <>
               {health.control.stopped && (
@@ -516,7 +516,7 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
                   <b>Emergency stop is ON</b>{health.control.reason ? ` - ${health.control.reason}` : ""}. Nothing new is being sent; queued messages are waiting.
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">
                 <Stat label="Queued (due now)" value={`${health.queue.queued} (${health.queue.dueNow})`} warn={health.queue.dueNow > 0 && health.queue.oldestDueAgeSeconds > 300} hint="Oldest due message age shown below" />
                 <Stat label="Oldest due" value={`${health.queue.oldestDueAgeSeconds}s`} />
                 <Stat label="Uncertain" value={health.reconciliation.uncertain} warn={health.reconciliation.uncertain > 0} />
@@ -527,7 +527,7 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
                 <Stat label="Open fraud events" value={health.security.openRiskEvents} warn={health.security.openRiskEvents > 0} />
               </div>
               <div className={card}>
-                <h3 className="mb-2 font-semibold">Spending today</h3>
+                <h3 className="mb-1.5 text-sm font-semibold">Spending today</h3>
                 {health.budget.length === 0 ? <p className="text-sm text-slate-400">No provider accounts.</p> : health.budget.map((b) => (
                   <div key={b.accountId} className="mb-2 text-sm">
                     <div className="flex justify-between"><span>{b.name}</span><span>{b.segmentsToday}{b.dailyLimit ? ` / ${b.dailyLimit}` : " (no cap)"} segments</span></div>
@@ -546,18 +546,18 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
                 </div>
               )}
               <div className={card + " overflow-x-auto p-0"}>
-                <h3 className="p-3 font-semibold">Alerts</h3>
-                <table className="w-full text-sm"><thead className="text-left text-slate-400"><tr><th className="p-3">Time</th><th>Rule</th><th>Severity</th><th>Summary</th><th>Status</th></tr></thead>
+                <h3 className="px-3 pt-2 text-sm font-semibold">Alerts</h3>
+                <table className="w-full text-xs"><thead className="text-left text-slate-400"><tr><th className="p-2">Time</th><th>Rule</th><th>Severity</th><th>Summary</th><th>Status</th></tr></thead>
                   <tbody>{alertRows.length === 0 ? <tr><td colSpan={5} className="p-4 text-slate-400">No communications alerts.</td></tr> : alertRows.map((a) => (
-                    <tr key={a.id} className="border-t border-white/5"><td className="p-3 whitespace-nowrap">{new Date(a.createdAt).toLocaleString()}</td><td className="font-mono text-xs">{a.ruleId}</td><td><Badge value={a.severity === "critical" || a.severity === "high" ? "failed" : a.severity === "medium" ? "uncertain" : "queued"} /> {a.severity}</td><td>{a.summary}</td><td><Badge value={a.status === "open" ? "uncertain" : "delivered"} /> {a.status}</td></tr>
+                    <tr key={a.id} className="border-t border-white/5"><td className="p-2 whitespace-nowrap">{new Date(a.createdAt).toLocaleString()}</td><td className="font-mono text-xs">{a.ruleId}</td><td><Badge value={a.severity === "critical" || a.severity === "high" ? "failed" : a.severity === "medium" ? "uncertain" : "queued"} /> {a.severity}</td><td>{a.summary}</td><td><Badge value={a.status === "open" ? "uncertain" : "delivered"} /> {a.status}</td></tr>
                   ))}</tbody></table>
                 <p className="p-3 text-xs text-slate-500">Acknowledge and resolve alerts in the Security Alerts console; the same incident record is used.</p>
               </div>
               <div className={card + " overflow-x-auto p-0"}>
-                <h3 className="p-3 font-semibold">Messages needing review</h3>
-                <table className="w-full text-sm"><thead className="text-left text-slate-400"><tr><th className="p-3">Time</th><th>State</th><th>Detail</th>{admin && <th>Resolve</th>}</tr></thead>
+                <h3 className="px-3 pt-2 text-sm font-semibold">Messages needing review</h3>
+                <table className="w-full text-xs"><thead className="text-left text-slate-400"><tr><th className="p-2">Time</th><th>State</th><th>Detail</th>{admin && <th>Resolve</th>}</tr></thead>
                   <tbody>{reviewMsgs.length === 0 ? <tr><td colSpan={admin ? 4 : 3} className="p-4 text-slate-400">Nothing to review.</td></tr> : reviewMsgs.map((m) => (
-                    <tr key={m.id} className="border-t border-white/5"><td className="p-3 whitespace-nowrap">{new Date(m.createdAt).toLocaleString()}</td><td><Badge value={m.state} /></td><td className="text-xs text-slate-400">{(m as any).lastError ?? ""}</td>
+                    <tr key={m.id} className="border-t border-white/5"><td className="p-2 whitespace-nowrap">{new Date(m.createdAt).toLocaleString()}</td><td><Badge value={m.state} /></td><td className="text-xs text-slate-400">{(m as any).lastError ?? ""}</td>
                       {admin && <td className="whitespace-nowrap pr-3">{m.state === "uncertain" ? <span className="flex gap-1"><button className={btnGhost} onClick={() => act("Marked sent", () => manage("POST", `/admin/sms/messages/${m.id}/reconcile`, { outcome: "sent" }), loadHealth)}>Was sent</button><button className={btnGhost} onClick={() => act("Marked not sent", () => manage("POST", `/admin/sms/messages/${m.id}/reconcile`, { outcome: "not_sent" }), loadHealth)}>Not sent</button></span> : null}</td>}
                     </tr>
                   ))}</tbody></table>
@@ -569,13 +569,13 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
 
       {/* ---------- Fraud & consent ---------- */}
       {tab === "fraud" && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className={card + " overflow-x-auto p-0"}>
-            <h3 className="p-3 font-semibold">Fraud events</h3>
+            <h3 className="px-3 pt-2 text-sm font-semibold">Fraud events</h3>
             <p className="px-3 pb-2 text-xs text-slate-500">Throttles and temporary blocks only - no account is ever suspended automatically. IPs and numbers are shown as short hash prefixes.</p>
-            <table className="w-full text-sm"><thead className="text-left text-slate-400"><tr><th className="p-3">Time</th><th>Kind</th><th>Score</th><th>Action</th><th>Status</th><th>Review</th></tr></thead>
+            <table className="w-full text-xs"><thead className="text-left text-slate-400"><tr><th className="p-2">Time</th><th>Kind</th><th>Score</th><th>Action</th><th>Status</th><th>Review</th></tr></thead>
               <tbody>{riskRows.length === 0 ? <tr><td colSpan={6} className="p-4 text-slate-400">No fraud events.</td></tr> : riskRows.map((r) => (
-                <tr key={r.id} className="border-t border-white/5"><td className="p-3 whitespace-nowrap">{new Date(r.createdAt).toLocaleString()}</td><td className="font-mono text-xs">{r.kind}</td><td>{r.score}</td><td><Badge value={r.action === "blocked" ? "failed" : r.action === "throttled" ? "uncertain" : "queued"} /> {r.action}</td><td>{r.status}</td>
+                <tr key={r.id} className="border-t border-white/5"><td className="p-2 whitespace-nowrap">{new Date(r.createdAt).toLocaleString()}</td><td className="font-mono text-xs">{r.kind}</td><td>{r.score}</td><td><Badge value={r.action === "blocked" ? "failed" : r.action === "throttled" ? "uncertain" : "queued"} /> {r.action}</td><td>{r.status}</td>
                   <td className="whitespace-nowrap pr-3">{r.status === "open" ? <span className="flex gap-1"><button className={btnGhost} onClick={() => act("Event confirmed", () => rawCall("POST", `/admin/sms/risk-events/${r.id}/review`, { decision: "confirmed" }), loadFraud)}>Confirm</button><button className={btnGhost} onClick={() => act("Event dismissed", () => rawCall("POST", `/admin/sms/risk-events/${r.id}/review`, { decision: "dismissed" }), loadFraud)}>Dismiss</button></span> : null}</td></tr>
               ))}</tbody></table>
           </div>
@@ -600,7 +600,7 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
 
       {/* ---------- Compliance ---------- */}
       {tab === "compliance" && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className={card + " text-sm text-slate-300"}>
             <p>US messaging needs approved carrier registration: <b>A2P 10DLC</b> (brand + campaign) for local numbers and Messaging Services, or <b>toll-free verification</b> for toll-free numbers. Record what Twilio/the carriers report; approval requires an evidence reference. A sender without every required approval cannot send (enforced in production).</p>
           </div>
@@ -615,9 +615,9 @@ export function CommunicationsConsole({ mode }: { mode: Mode }) {
             </div>
           )}
           <div className={card + " overflow-x-auto p-0"}>
-            <table className="w-full text-sm"><thead className="text-left text-slate-400"><tr><th className="p-3">Type</th><th>Account</th><th>Status</th><th>Identifiers</th><th>Evidence</th><th>Expires</th>{admin && <th>Update</th>}</tr></thead>
+            <table className="w-full text-xs"><thead className="text-left text-slate-400"><tr><th className="p-2">Type</th><th>Account</th><th>Status</th><th>Identifiers</th><th>Evidence</th><th>Expires</th>{admin && <th>Update</th>}</tr></thead>
               <tbody>{regs.length === 0 ? <tr><td colSpan={admin ? 7 : 6} className="p-4 text-slate-400">No registrations recorded.</td></tr> : regs.map((r) => (
-                <tr key={r.id} className="border-t border-white/5 align-top"><td className="p-3 font-mono text-xs">{r.type}</td><td>{(accounts ?? []).find((a) => a.id === r.accountId)?.name ?? r.accountId.slice(0, 8)}{r.senderId ? " (one sender)" : ""}</td><td><Badge value={r.status === "approved" ? "active" : r.status === "pending" ? "pending" : r.status === "rejected" || r.status === "suspended" ? "failed" : "revoked"} /> {r.status}</td><td className="text-xs text-slate-400">{[r.brandId && `brand ${r.brandId}`, r.campaignId && `campaign ${r.campaignId}`].filter(Boolean).join(" · ")}</td><td className="max-w-[220px] truncate text-xs text-slate-400" title={r.evidenceNote ?? ""}>{r.evidenceNote ?? ""}</td><td className="text-xs">{r.expiresAt ? new Date(r.expiresAt).toLocaleDateString() : ""}</td>
+                <tr key={r.id} className="border-t border-white/5 align-top"><td className="p-2 font-mono text-xs">{r.type}</td><td>{(accounts ?? []).find((a) => a.id === r.accountId)?.name ?? r.accountId.slice(0, 8)}{r.senderId ? " (one sender)" : ""}</td><td><Badge value={r.status === "approved" ? "active" : r.status === "pending" ? "pending" : r.status === "rejected" || r.status === "suspended" ? "failed" : "revoked"} /> {r.status}</td><td className="text-xs text-slate-400">{[r.brandId && `brand ${r.brandId}`, r.campaignId && `campaign ${r.campaignId}`].filter(Boolean).join(" · ")}</td><td className="max-w-[220px] truncate text-xs text-slate-400" title={r.evidenceNote ?? ""}>{r.evidenceNote ?? ""}</td><td className="text-xs">{r.expiresAt ? new Date(r.expiresAt).toLocaleDateString() : ""}</td>
                   {admin && <td className="whitespace-nowrap pr-3"><span className="flex flex-wrap gap-1">
                     {r.status === "pending" && <><button className={btnPrimary} onClick={() => { setEvidenceText(""); setEvidence({ reg: r, to: "approved" }); }}>Approve…</button><button className={btnDanger} onClick={() => act("Marked rejected", () => manage("POST", `/admin/sms/compliance/${r.id}/status`, { status: "rejected", evidenceNote: "rejected by provider" }), loadCompliance)}>Rejected</button></>}
                     {r.status === "approved" && <><button className={btnGhost} onClick={() => act("Marked suspended", () => manage("POST", `/admin/sms/compliance/${r.id}/status`, { status: "suspended" }), loadCompliance)}>Suspended</button></>}
@@ -720,8 +720,8 @@ const clean = <T extends Record<string, string>>(o: T) => Object.fromEntries(Obj
 function Stat({ label, value, warn, hint }: { label: string; value: number | string; warn?: boolean; hint?: string }) {
   return (
     <div className={`${card} ${warn ? "border-amber-500/50" : ""}`} title={hint}>
-      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-      <p className={`text-2xl font-bold ${warn ? "text-amber-300" : ""}`}>{value}</p>
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
+      <p className={`text-xl font-bold leading-tight ${warn ? "text-amber-300" : ""}`}>{value}</p>
     </div>
   );
 }
@@ -750,8 +750,8 @@ function Copy({ label, value }: { label: string; value: string | null }) {
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
-      <div className="w-full max-w-md space-y-3 rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
+      <div className="w-full max-w-md space-y-2.5 rounded-xl border border-white/10 bg-slate-900 p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-base font-semibold text-white">{title}</h2>
         {children}
       </div>
     </div>

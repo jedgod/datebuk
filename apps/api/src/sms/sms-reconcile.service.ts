@@ -120,7 +120,13 @@ export class SmsReconcileService {
   private async loadAccount(id: string) {
     const a = await this.prisma.twilioAccount.findUnique({ where: { id } });
     if (!a) return null;
-    const creds = this.accounts.restCredentials(a);
-    return creds ? { accountSid: a.accountSid, creds } : null;
+    try {
+      const creds = this.accounts.restCredentials(a);
+      return creds ? { accountSid: a.accountSid, creds } : null;
+    } catch (e) {
+      // An unreadable credential (wrong key, corrupted row) must not break the run for every other account.
+      this.log.error(`reconciliation skipped account ${a.id}: credentials unreadable (${(e as Error).message})`);
+      return null;
+    }
   }
 }
